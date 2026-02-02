@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "WebFetch(domain:data.austintexas.gov)",
+      "Bash(python3:*)",
+      "WebFetch(domain:financeonline.austintexas.gov)",
+      "WebFetch(domain:webapi.legistar.com)",
+      "Bash(SCRATCHPAD='/private/tmp/claude-501/-Users-daniela-scraper-project/1d82206c-9af2-4dba-98e0-20bd957da0e9/scratchpad')",
+      "Bash(open:*)"
+    ]
+  }
+}
