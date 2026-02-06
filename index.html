@@ -47,6 +47,11 @@
     font-size: .85rem; color: var(--gray-600); cursor: pointer; white-space: nowrap; align-self: end;
   }
   .btn-clear:hover { background: var(--gray-100); border-color: var(--gray-400); }
+  .btn-export {
+    padding: .45rem 1rem; border: none; border-radius: .375rem; background: var(--blue-500);
+    font-size: .85rem; color: #fff; cursor: pointer; white-space: nowrap;
+  }
+  .btn-export:hover { background: var(--blue-700); }
 
   /* Results bar */
   .results-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: .5rem; font-size: .85rem; color: var(--gray-600); flex-wrap: wrap; gap: .5rem; }
@@ -122,7 +127,7 @@
     <!-- Results -->
     <div class="results-bar">
       <span>Showing <strong id="resultCount">0</strong> of <strong id="totalCount">0</strong> contracts</span>
-      <span>Total filtered value: <strong id="filteredValue">$0</strong></span>
+      <span>Total filtered value: <strong id="filteredValue">$0</strong> &nbsp; <button class="btn-export" id="btnExport">Export CSV</button></span>
     </div>
     <div class="table-wrap">
       <table>
@@ -292,6 +297,8 @@ function initUI() {
     renderTable();
   });
 
+  document.getElementById('btnExport').addEventListener('click', exportCSV);
+
   renderTable();
 }
 
@@ -339,6 +346,46 @@ function renderTable(){
       return '<td title="'+(typeof v==='string'?v.replace(/"/g,'&quot;'):(v||''))+'">'+display+'</td>';
     }).join('')+'</tr>'
   ).join('');
+}
+
+function exportCSV(){
+  const rows = getFiltered();
+  if(rows.length === 0){ alert('No data to export'); return; }
+
+  // CSV headers (exclude Link column for cleaner export, add raw link URL instead)
+  const exportCols = [
+    {key:"state",label:"State/City"},
+    {key:"company",label:"Company"},
+    {key:"contract",label:"Contract Name"},
+    {key:"amount",label:"Award Amount"},
+    {key:"date",label:"Begin Date"},
+    {key:"type",label:"Commodity Type"},
+    {key:"contact",label:"Contact"},
+    {key:"phone",label:"Phone"},
+    {key:"email",label:"Email"},
+    {key:"description",label:"Description"},
+    {key:"link",label:"Link"}
+  ];
+
+  const escapeCSV = v => {
+    if(v == null) return '';
+    const s = String(v);
+    if(s.includes(',') || s.includes('"') || s.includes('\n')) return '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  };
+
+  let csv = exportCols.map(c => escapeCSV(c.label)).join(',') + '\n';
+  rows.forEach(d => {
+    csv += exportCols.map(c => escapeCSV(d[c.key])).join(',') + '\n';
+  });
+
+  const blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'construction_contracts_' + new Date().toISOString().slice(0,10) + '.csv';
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 // Load data on page load
