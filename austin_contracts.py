@@ -3,9 +3,10 @@ Austin, TX Construction Contracts Scraper (Phase 1)
 Scrapes awarded construction contracts from Austin Finance Online.
 Filters by NAICS-mapped commodity types, date, and amount.
 Enriches with vendor contact info from vendor profile pages.
+CRITICAL: Only includes contracts where Amount Expended > $0 (actually awarded/paid).
+Exports directly to Google Sheets.
 """
 
-import csv
 import html
 import re
 import ssl
@@ -13,6 +14,9 @@ import sys
 import time
 from datetime import datetime
 from urllib.request import urlopen, Request
+
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
 
 # --- SSL setup (macOS Python often lacks default certs) ---
 try:
@@ -28,8 +32,12 @@ BASE_URL = "https://financeonline.austintexas.gov/afo/contract_catalog"
 LIST_URL = f"{BASE_URL}/OCCShowCat.cfm?cat=120"  # Construction category
 MIN_AMOUNT = 50_000
 MIN_DATE = datetime(2025, 12, 1)
-OUTPUT_FILE = "austin_construction_contracts.csv"
 REQUEST_DELAY = 0.5  # seconds between page requests
+
+# Google Sheets config
+SERVICE_ACCOUNT_FILE = "service-account-key.json"
+SPREADSHEET_ID = "1HQMnHzPrx0Qa4ijuaR0BcVptpiiVG7mE3Po17rvruKQ"
+SHEET_NAME = "Webscraper Tool for Procurement Sites Two"
 
 # --- NAICS keyword mapping ---
 NAICS_FILTERS = [
@@ -120,6 +128,11 @@ def parse_detail_page(url):
         r"Authorized\s+Amount:</th>\s*<td>\s*\$([\d,]+(?:\.\d{2})?)\s*</td>"
     )
 
+    # Amount Expended
+    amount_expended_str = extract(
+        r"Amount\s+Expended:</th>\s*<td>\s*\$([\d,]+(?:\.\d{2})?)\s*</td>"
+    )
+
     # Commodity description
     commodity_desc = extract(
         r"text-align:left[^>]*>\s*(.+?)\s*</td>\s*<td[^>]*>\d{5}</td>",
@@ -136,6 +149,7 @@ def parse_detail_page(url):
         "commodity_code": commodity_code,
         "begin_date_str": begin_date_str,
         "amount_str": amount_str,
+        "amount_expended_str": amount_expended_str,
     }
 
 
@@ -232,6 +246,7 @@ def scrape_all():
     skipped_naics = 0
     skipped_date = 0
     skipped_amount = 0
+    skipped_not_expended = 0
     errors = 0
 
     for i, c in enumerate(contracts, 1):
@@ -266,6 +281,12 @@ def scrape_all():
             skipped_amount += 1
             continue
 
+        # CRITICAL: Only include contracts with actual expenditure (truly awarded)
+        amount_expended = parse_amount(detail["amount_expended_str"])
+        if amount_expended <= 0:
+            skipped_not_expended += 1
+            continue
+
         vendor_name = detail["vendor"] or "Unknown"
         dedup_key = (c["contract_id"], vendor_name)
         if dedup_key in seen:
@@ -290,6 +311,7 @@ def scrape_all():
             "company_name": vendor_name,
             "contract_name": c["list_description"],
             "award_amount": amount,
+            "amount_expended": amount_expended,
             "begin_date": begin_date.strftime("%Y-%m-%d"),
             "award_link": c["detail_url"],
             "description": enhance_description(
@@ -301,6 +323,7 @@ def scrape_all():
             "phone": vendor_info["phone"],
             "email": vendor_info["email"],
             "website": vendor_info["website"],
+            "city": "Austin",
         })
 
         time.sleep(REQUEST_DELAY)
@@ -310,6 +333,7 @@ def scrape_all():
     print(f"Skipped (NAICS):     {skipped_naics}")
     print(f"Skipped (date):      {skipped_date}")
     print(f"Skipped (amount):    {skipped_amount}")
+    print(f"Skipped ($0 expended): {skipped_not_expended}")
     print(f"Errors:              {errors}")
     print(f"Matched:             {len(results)}")
     print(f"Unique vendors:      {len(vendor_cache)}")
@@ -317,26 +341,80 @@ def scrape_all():
     return results
 
 
-CSV_FIELDS = [
-    "company_name", "contact_name", "phone", "email",
+SHEET_FIELDS = [
+    "city", "company_name", "contact_name", "phone", "email",
     "address", "website",
-    "contract_name", "award_amount", "begin_date",
+    "contract_name", "award_amount", "amount_expended", "begin_date",
     "award_link", "description", "commodity_type",
 ]
-CSV_HEADERS = [
-    "Company Name", "Contact Name", "Phone", "Email",
+SHEET_HEADERS = [
+    "City", "Company Name", "Contact Name", "Phone", "Email",
     "Address", "Website",
-    "Contract Name", "Award Amount", "Begin Date",
+    "Contract Name", "Award Amount", "Amount Expended", "Begin Date",
     "Award Link", "Project Description", "Commodity Type",
 ]
 
 
-def write_csv(results):
-    with open(OUTPUT_FILE, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=CSV_FIELDS)
-        writer.writerow(dict(zip(CSV_FIELDS, CSV_HEADERS)))
-        writer.writerows(results)
-    print(f"Wrote {len(results)} rows to {OUTPUT_FILE}")
+def get_sheets_service():
+    """Authenticate and return Google Sheets API service."""
+    creds = service_account.Credentials.from_service_account_file(
+        SERVICE_ACCOUNT_FILE,
+        scopes=["https://www.googleapis.com/auth/spreadsheets"]
+    )
+    return build("sheets", "v4", credentials=creds)
+
+
+def write_to_google_sheets(results):
+    """Write results directly to Google Sheets, replacing existing data."""
+    service = get_sheets_service()
+    sheet = service.spreadsheets()
+
+    # Build rows: header + data
+    rows = [SHEET_HEADERS]
+    for r in results:
+        rows.append([r.get(f, "") for f in SHEET_FIELDS])
+
+    # Get the sheet ID for our target sheet
+    spreadsheet = sheet.get(spreadsheetId=SPREADSHEET_ID).execute()
+    sheet_id = None
+    for s in spreadsheet.get("sheets", []):
+        if s["properties"]["title"] == SHEET_NAME:
+            sheet_id = s["properties"]["sheetId"]
+            break
+
+    if sheet_id is None:
+        # Create the sheet if it doesn't exist
+        request = {
+            "requests": [{
+                "addSheet": {
+                    "properties": {"title": SHEET_NAME}
+                }
+            }]
+        }
+        sheet.batchUpdate(spreadsheetId=SPREADSHEET_ID, body=request).execute()
+        print(f"Created new sheet: {SHEET_NAME}")
+
+    # Clear existing data in the sheet
+    try:
+        clear_range = f"'{SHEET_NAME}'!A1:Z1000"
+        sheet.values().clear(
+            spreadsheetId=SPREADSHEET_ID,
+            range=clear_range,
+            body={}
+        ).execute()
+    except Exception:
+        pass  # Sheet might be empty
+
+    # Write new data starting at A1
+    write_range = f"'{SHEET_NAME}'!A1"
+    sheet.values().update(
+        spreadsheetId=SPREADSHEET_ID,
+        range=write_range,
+        valueInputOption="RAW",
+        body={"values": rows}
+    ).execute()
+
+    print(f"Wrote {len(results)} rows to Google Sheet: {SHEET_NAME}")
 
 
 def main():
@@ -345,7 +423,8 @@ def main():
         print("\nNo contracts matched all filters.")
         print("Try adjusting MIN_DATE or NAICS_FILTERS if this is unexpected.")
         sys.exit(0)
-    write_csv(results)
+    write_to_google_sheets(results)
+    print(f"\nView results at: https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}")
 
 
 if __name__ == "__main__":
