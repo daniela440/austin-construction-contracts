@@ -1,0 +1,7 @@
+.env
+service-account-key.json
+ddg_search_counter.json
+search_counter.json
+__pycache__/
+*.pyc
+.DS_Store

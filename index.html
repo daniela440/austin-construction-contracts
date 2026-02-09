@@ -150,6 +150,7 @@ let DATA = [];
 const COLS = [
   {key:"state",label:"State/City"},
   {key:"company",label:"Company"},
+  {key:"website",label:"Website",fmt:v=>{if(!v)return '';try{const u=v.startsWith('http')?v:'https://'+v;return '<a href="'+u+'" target="_blank">'+new URL(u).hostname.replace(/^www\./,'')+'</a>';}catch(e){return v;}}},
   {key:"contract",label:"Contract Name"},
   {key:"amount",label:"Award Amount",fmt:v=>v?'$'+Number(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):''},
   {key:"date",label:"Begin Date"},
