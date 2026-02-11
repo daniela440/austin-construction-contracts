@@ -156,14 +156,15 @@ let DATA = [];
 const COLS = [
   {key:"state",label:"State/City"},
   {key:"company",label:"Company"},
-  {key:"contact",label:"Contact"},
   {key:"website",label:"Website",fmt:v=>{if(!v)return '';try{const u=v.startsWith('http')?v:'https://'+v;return '<a href="'+u+'" target="_blank">'+new URL(u).hostname.replace(/^www\./,'')+'</a>';}catch(e){return v;}}},
+  {key:"companyInfo",label:"Company Info",expand:true},
+  {key:"contact",label:"Contact"},
+  {key:"title",label:"Title"},
+  {key:"phone",label:"Phone"},
+  {key:"email",label:"Email"},
   {key:"amount",label:"Award Amount",fmt:v=>v?'$'+Number(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):''},
   {key:"date",label:"Begin Date"},
   {key:"type",label:"Commodity Type"},
-  {key:"companyInfo",label:"Company Info",expand:true},
-  {key:"phone",label:"Phone"},
-  {key:"email",label:"Email"},
   {key:"description",label:"Description",expand:true},
   {key:"link",label:"Link",fmt:v=>v?'<a href="'+v+'" target="_blank">View</a>':''}
 ];
@@ -245,7 +246,8 @@ async function loadData() {
       link: (row[11] || '').trim(),
       description: (row[12] || '').trim(),
       type: (row[13] || '').trim(),
-      companyInfo: (row[14] || '').trim()
+      companyInfo: (row[14] || '').trim(),
+      title: (row[15] || '').trim()
     })).filter(d => d.company); // Filter out empty rows
 
     document.getElementById('loadingMsg').style.display = 'none';
@@ -375,13 +377,15 @@ function exportCSV(){
   const exportCols = [
     {key:"state",label:"State/City"},
     {key:"company",label:"Company"},
+    {key:"website",label:"Website"},
+    {key:"companyInfo",label:"Company Info"},
     {key:"contact",label:"Contact"},
+    {key:"title",label:"Title"},
+    {key:"phone",label:"Phone"},
+    {key:"email",label:"Email"},
     {key:"amount",label:"Award Amount"},
     {key:"date",label:"Begin Date"},
     {key:"type",label:"Commodity Type"},
-    {key:"companyInfo",label:"Company Info"},
-    {key:"phone",label:"Phone"},
-    {key:"email",label:"Email"},
     {key:"description",label:"Description"},
     {key:"link",label:"Link"}
   ];
