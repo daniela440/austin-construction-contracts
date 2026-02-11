@@ -65,7 +65,13 @@
   th.sorted-asc::after { content: ' \u25B2'; font-size: .6rem; }
   th.sorted-desc::after { content: ' \u25BC'; font-size: .6rem; }
   td { padding: .55rem .5rem; border-bottom: 1px solid var(--gray-100); max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  td.expandable { cursor: pointer; position: relative; }
+  td.expandable:hover { background: var(--blue-100); }
+  td.expandable::after { content: '...'; color: var(--gray-400); font-size: .7rem; }
+  td.expanded { white-space: normal; overflow: visible; max-width: 400px; word-wrap: break-word; background: #fffde7; }
+  td.expanded::after { content: ''; }
   tr:hover td { background: var(--blue-100); }
+  td.expanded, tr:hover td.expanded { background: #fffde7; }
   td a { color: var(--blue-500); text-decoration: none; }
   td a:hover { text-decoration: underline; }
   .no-results { text-align: center; padding: 2rem; color: var(--gray-400); font-size: .9rem; }
@@ -155,10 +161,10 @@ const COLS = [
   {key:"amount",label:"Award Amount",fmt:v=>v?'$'+Number(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):''},
   {key:"date",label:"Begin Date"},
   {key:"type",label:"Commodity Type"},
-  {key:"contact",label:"Contact"},
+  {key:"companyInfo",label:"Company Info",expand:true},
   {key:"phone",label:"Phone"},
   {key:"email",label:"Email"},
-  {key:"description",label:"Description"},
+  {key:"description",label:"Description",expand:true},
   {key:"link",label:"Link",fmt:v=>v?'<a href="'+v+'" target="_blank">View</a>':''}
 ];
 
@@ -238,7 +244,8 @@ async function loadData() {
       date: (row[10] || '').trim(),
       link: (row[11] || '').trim(),
       description: (row[12] || '').trim(),
-      type: (row[13] || '').trim()
+      type: (row[13] || '').trim(),
+      companyInfo: (row[14] || '').trim()
     })).filter(d => d.company); // Filter out empty rows
 
     document.getElementById('loadingMsg').style.display = 'none';
@@ -344,9 +351,20 @@ function renderTable(){
     '<tr>'+COLS.map(c=>{
       const v = d[c.key];
       const display = c.fmt ? c.fmt(v) : (v || '');
-      return '<td title="'+(typeof v==='string'?v.replace(/"/g,'&quot;'):(v||''))+'">'+display+'</td>';
+      const isLong = c.expand && typeof v === 'string' && v.length > 30;
+      const cls = isLong ? ' class="expandable"' : '';
+      return '<td'+cls+' title="'+(typeof v==='string'?v.replace(/"/g,'&quot;'):(v||''))+'">'+display+'</td>';
     }).join('')+'</tr>'
   ).join('');
+
+  // Bind expand/collapse on expandable cells
+  tbody.querySelectorAll('td.expandable').forEach(td=>{
+    td.addEventListener('click', function(e){
+      if(e.target.tagName === 'A') return; // Don't interfere with links
+      this.classList.toggle('expanded');
+      this.classList.toggle('expandable');
+    });
+  });
 }
 
 function exportCSV(){
@@ -361,7 +379,7 @@ function exportCSV(){
     {key:"amount",label:"Award Amount"},
     {key:"date",label:"Begin Date"},
     {key:"type",label:"Commodity Type"},
-    {key:"contact",label:"Contact"},
+    {key:"companyInfo",label:"Company Info"},
     {key:"phone",label:"Phone"},
     {key:"email",label:"Email"},
     {key:"description",label:"Description"},

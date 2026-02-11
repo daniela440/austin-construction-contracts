@@ -364,15 +364,23 @@ def get_sheets_service():
     return build("sheets", "v4", credentials=creds)
 
 
-def write_to_google_sheets(results):
-    """Write results directly to Google Sheets, replacing existing data."""
+def get_existing_data(service):
+    """Fetch existing data from the sheet to append to."""
+    sheet = service.spreadsheets()
+    try:
+        result = sheet.values().get(
+            spreadsheetId=SPREADSHEET_ID,
+            range=f"'{SHEET_NAME}'!A:N"
+        ).execute()
+        return result.get("values", [])
+    except Exception:
+        return []
+
+
+def write_to_google_sheets(results, append=True):
+    """Write results to Google Sheets. If append=True, add to existing data."""
     service = get_sheets_service()
     sheet = service.spreadsheets()
-
-    # Build rows: header + data
-    rows = [SHEET_HEADERS]
-    for r in results:
-        rows.append([r.get(f, "") for f in SHEET_FIELDS])
 
     # Get the sheet ID for our target sheet
     spreadsheet = sheet.get(spreadsheetId=SPREADSHEET_ID).execute()
@@ -383,7 +391,6 @@ def write_to_google_sheets(results):
             break
 
     if sheet_id is None:
-        # Create the sheet if it doesn't exist
         request = {
             "requests": [{
                 "addSheet": {
@@ -394,36 +401,70 @@ def write_to_google_sheets(results):
         sheet.batchUpdate(spreadsheetId=SPREADSHEET_ID, body=request).execute()
         print(f"Created new sheet: {SHEET_NAME}")
 
-    # Clear existing data in the sheet
-    try:
+    if append:
+        existing = get_existing_data(service)
+        start_row = len(existing) + 1
+
+        if not existing:
+            header_range = f"'{SHEET_NAME}'!A1"
+            sheet.values().update(
+                spreadsheetId=SPREADSHEET_ID,
+                range=header_range,
+                valueInputOption="RAW",
+                body={"values": [SHEET_HEADERS]}
+            ).execute()
+            start_row = 2
+
+        rows = []
+        for r in results:
+            rows.append([r.get(f, "") for f in SHEET_FIELDS])
+
+        if rows:
+            write_range = f"'{SHEET_NAME}'!A{start_row}"
+            sheet.values().update(
+                spreadsheetId=SPREADSHEET_ID,
+                range=write_range,
+                valueInputOption="RAW",
+                body={"values": rows}
+            ).execute()
+    else:
+        rows = [SHEET_HEADERS]
+        for r in results:
+            rows.append([r.get(f, "") for f in SHEET_FIELDS])
+
         clear_range = f"'{SHEET_NAME}'!A1:Z1000"
         sheet.values().clear(
             spreadsheetId=SPREADSHEET_ID,
             range=clear_range,
             body={}
         ).execute()
-    except Exception:
-        pass  # Sheet might be empty
 
-    # Write new data starting at A1
-    write_range = f"'{SHEET_NAME}'!A1"
-    sheet.values().update(
-        spreadsheetId=SPREADSHEET_ID,
-        range=write_range,
-        valueInputOption="RAW",
-        body={"values": rows}
-    ).execute()
+        write_range = f"'{SHEET_NAME}'!A1"
+        sheet.values().update(
+            spreadsheetId=SPREADSHEET_ID,
+            range=write_range,
+            valueInputOption="RAW",
+            body={"values": rows}
+        ).execute()
 
     print(f"Wrote {len(results)} rows to Google Sheet: {SHEET_NAME}")
 
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--append", action="store_true", default=True,
+                        help="Append to existing sheet data (default)")
+    parser.add_argument("--replace", action="store_true",
+                        help="Replace existing sheet data instead of appending")
+    args = parser.parse_args()
+
     results = scrape_all()
     if not results:
         print("\nNo contracts matched all filters.")
         print("Try adjusting MIN_DATE or NAICS_FILTERS if this is unexpected.")
         sys.exit(0)
-    write_to_google_sheets(results)
+    write_to_google_sheets(results, append=not args.replace)
     print(f"\nView results at: https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}")
 
 
