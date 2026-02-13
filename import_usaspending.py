@@ -135,10 +135,21 @@ def naics_label(naics):
     return f"{label} (NAICS {code})"
 
 
+KEEP_UPPER = {"LLC", "LP", "LLP", "PLLC", "LTD", "JV", "II", "III", "IV", "PC", "PA"}
+
+
+def title_case(name):
+    """Convert 'FISHER SAND & GRAVEL CO' to 'Fisher Sand & Gravel Co'."""
+    if not name:
+        return ""
+    words = name.title().split()
+    return " ".join(w.upper() if w.upper() in KEEP_UPPER else w for w in words)
+
+
 def map_to_row(award):
     """Map an API result to the 14-column scraper sheet format."""
     state = award.get("Place of Performance State Code") or ""
-    company = award.get("Recipient Name") or ""
+    company = title_case(award.get("Recipient Name") or "")
     award_id = award.get("Award ID") or ""
     amount = award.get("Award Amount")
     outlays = award.get("Total Outlays")
