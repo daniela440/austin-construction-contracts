@@ -395,22 +395,14 @@ async function loadOsha() {
     const csv = await fetch(csvUrl(OSHA_SHEET)).then(r => { if(!r.ok) throw new Error('Fetch failed'); return r.text(); });
     const rows = parseAllCSV(csv);
 
-    // Find 2026 header row (first row where row[0] === "Company")
-    let headerIdx = -1;
-    for (let i = 0; i < rows.length; i++) {
-      if ((rows[i][0]||'').trim() === 'Company') { headerIdx = i; break; }
-    }
-    if (headerIdx < 0) throw new Error('Could not find data header row');
-
-    // Collect 2026 data rows — stop at 2025 section marker or second "Company" header
-    let secondHeader = false;
+    // Parse all data rows, filter to 2026 only by inspection date
     OSHA_DATA = [];
-    for (let i = headerIdx + 1; i < rows.length; i++) {
+    for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
       const cell0 = (r[0]||'').trim();
-      if (cell0.startsWith('===')) break;       // section 2 marker
-      if (cell0 === 'Company') break;            // second header = section 2
-      if (!cell0) continue;                      // blank row
+      if (!cell0 || cell0 === 'Company' || cell0.startsWith('===') || cell0.startsWith('These')) continue;
+      const inspDate = (r[6]||'').trim();
+      if (!inspDate.includes('2026')) continue;  // 2026 only
       OSHA_DATA.push({
         company:     cell0,
         city:        (r[1]||'').trim(),
