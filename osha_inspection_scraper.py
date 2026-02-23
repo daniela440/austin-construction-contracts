@@ -424,10 +424,32 @@ LEGEND_ROWS = [
 ]
 
 
+APOLLO_HEADERS = ["Website", "Contact Name", "Title", "Email", "Phone", "Company Info"]
+# Column index where Apollo data starts (R = index 17, after 17 base columns A-Q)
+APOLLO_COL_START = 17
+
+
 def write_to_google_sheets(results_2026, results_2025):
     service = get_sheets_service()
     ensure_sheet_exists(service)
     sheet = service.spreadsheets()
+
+    # Preserve existing Apollo enrichment (cols R-W) before clearing
+    apollo_by_company = {}
+    try:
+        existing = sheet.values().get(
+            spreadsheetId=SPREADSHEET_ID,
+            range=f"'{SHEET_NAME}'!A:W",
+        ).execute().get("values", [])
+        for row in existing:
+            if len(row) > APOLLO_COL_START and row[0] and row[0] not in ("Company", ""):
+                apollo_cols = row[APOLLO_COL_START:]
+                if any(c.strip() for c in apollo_cols):
+                    apollo_by_company[row[0].strip().lower()] = apollo_cols
+        if apollo_by_company:
+            print(f"  Preserved Apollo data for {len(apollo_by_company)} companies")
+    except Exception as e:
+        print(f"  Could not read existing Apollo data: {e}")
 
     section_2026 = [
         ["=== SECTION 1: 2026 — Fresh Leads (Currently Under Investigation) ==="],
@@ -435,7 +457,7 @@ def write_to_google_sheets(results_2026, results_2025):
          "(OSHA takes 6-12 weeks to process). High-value outreach window — "
          "contact them before the fine arrives."],
         [],
-        SHEET_HEADERS,
+        SHEET_HEADERS + APOLLO_HEADERS,
     ] + [[r.get(f, "") for f in SHEET_FIELDS] for r in results_2026]
 
     section_2025 = [
@@ -461,6 +483,33 @@ def write_to_google_sheets(results_2026, results_2025):
         valueInputOption="RAW",
         body={"values": all_rows},
     ).execute()
+
+    # Restore Apollo data for 2026 rows (data starts at row 5)
+    if apollo_by_company:
+        apollo_updates = []
+        data_start_row = 5  # row 1=section header, 2=desc, 3=blank, 4=headers, 5=data
+        for idx, r in enumerate(results_2026):
+            company_key = r.get("estab_name", "").strip().lower()
+            apollo = apollo_by_company.get(company_key)
+            if apollo:
+                sheet_row = data_start_row + idx
+                col_letter = "R"
+                for col_offset, value in enumerate(apollo):
+                    col = chr(ord(col_letter) + col_offset)
+                    if value and value.strip():
+                        apollo_updates.append({
+                            "range": f"'{SHEET_NAME}'!{col}{sheet_row}",
+                            "values": [[value]],
+                        })
+        if apollo_updates:
+            for start in range(0, len(apollo_updates), 100):
+                chunk = apollo_updates[start:start + 100]
+                sheet.values().batchUpdate(
+                    spreadsheetId=SPREADSHEET_ID,
+                    body={"valueInputOption": "RAW", "data": chunk},
+                ).execute()
+            restored = sum(1 for u in apollo_updates if u)
+            print(f"  Restored Apollo data: {restored} cells across {len(apollo_by_company)} companies")
 
     print(f"Wrote {len(results_2026)} rows (2026) + {len(results_2025)} rows (2025) + legend to '{SHEET_NAME}'")
 
