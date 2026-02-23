@@ -18,6 +18,8 @@
     --gray-400: #94a3b8;
     --gray-600: #475569;
     --gray-800: #1e293b;
+    --orange-500: #f97316;
+    --orange-100: #ffedd5;
   }
   * { margin:0; padding:0; box-sizing:border-box; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--gray-50); color: var(--gray-800); }
@@ -25,6 +27,16 @@
   header h1 { font-size: 1.6rem; margin-bottom: .2rem; }
   header p { color: var(--blue-400); font-size: .9rem; }
   .container { max-width: 1400px; margin: 0 auto; padding: 1.5rem; }
+
+  /* Tabs */
+  .tabs { background: var(--blue-700); display: flex; gap: 0; }
+  .tab-btn {
+    padding: .75rem 2rem; border: none; background: transparent; color: rgba(255,255,255,.65);
+    font-size: .9rem; font-weight: 600; cursor: pointer; border-bottom: 3px solid transparent;
+    transition: color .15s, border-color .15s; white-space: nowrap;
+  }
+  .tab-btn:hover { color: #fff; }
+  .tab-btn.active { color: #fff; border-bottom-color: var(--blue-400); }
 
   /* Loading */
   .loading { text-align: center; padding: 3rem; color: var(--gray-600); }
@@ -76,10 +88,17 @@
   td a:hover { text-decoration: underline; }
   .no-results { text-align: center; padding: 2rem; color: var(--gray-400); font-size: .9rem; }
 
+  /* OSHA priority badge */
+  .badge { display: inline-block; padding: .15rem .45rem; border-radius: .25rem; font-size: .7rem; font-weight: 700; }
+  .badge-high { background: #fee2e2; color: #991b1b; }
+  .badge-medium { background: #fef3c7; color: #92400e; }
+  .badge-low { background: #dcfce7; color: #166534; }
+
   footer { text-align: center; padding: 1.5rem; font-size: .8rem; color: var(--gray-400); }
 
   @media (max-width: 700px) {
     .filter-grid { grid-template-columns: 1fr 1fr; }
+    .tab-btn { padding: .75rem 1.25rem; font-size: .8rem; }
   }
   @media (max-width: 450px) {
     .filter-grid { grid-template-columns: 1fr; }
@@ -89,330 +108,412 @@
 <body>
 <header>
   <h1>Construction Contracts Dashboard</h1>
-  <p>Multi-State Government Construction Contract Awards</p>
+  <p>Multi-State Government Construction Contract Awards &amp; OSHA Leads</p>
 </header>
-<div class="container">
-  <div id="loadingMsg" class="loading">Loading contract data from Google Sheets...</div>
-  <div id="errorMsg" class="error" style="display:none;"></div>
 
-  <div id="mainContent" style="display:none;">
-    <!-- Filters -->
-    <div class="filters">
-      <h2>Filter Contracts</h2>
-      <div class="filter-grid">
-        <div class="filter-group">
-          <label>State/City</label>
-          <select id="fState"><option value="">All States</option></select>
-        </div>
-        <div class="filter-group">
-          <label>Company Name</label>
-          <input type="text" id="fCompany" placeholder="Search company...">
-        </div>
-        <div class="filter-group">
-          <label>Begin Date From</label>
-          <input type="date" id="fDateFrom">
-        </div>
-        <div class="filter-group">
-          <label>Min Amount ($)</label>
-          <input type="number" id="fAmountMin" placeholder="0" min="0">
-        </div>
-        <div class="filter-group">
-          <label>Max Amount ($)</label>
-          <input type="number" id="fAmountMax" placeholder="Any" min="0">
-        </div>
-        <div class="filter-group">
-          <label>Commodity Type</label>
-          <select id="fType"><option value="">All Types</option></select>
-        </div>
-        <div class="filter-group">
-          <button class="btn-clear" id="btnClear">Clear Filters</button>
+<div class="tabs">
+  <button class="tab-btn active" id="tabContracts" onclick="switchTab('contracts')">Procurement Contracts</button>
+  <button class="tab-btn" id="tabOsha" onclick="switchTab('osha')">OSHA Leads 2026</button>
+</div>
+
+<div class="container">
+
+  <!-- ===== CONTRACTS TAB ===== -->
+  <div id="panelContracts">
+    <div id="contractsLoading" class="loading">Loading contract data from Google Sheets...</div>
+    <div id="contractsError" class="error" style="display:none;"></div>
+    <div id="contractsContent" style="display:none;">
+      <div class="filters">
+        <h2>Filter Contracts</h2>
+        <div class="filter-grid">
+          <div class="filter-group">
+            <label>State/City</label>
+            <select id="fState"><option value="">All States</option></select>
+          </div>
+          <div class="filter-group">
+            <label>Company Name</label>
+            <input type="text" id="fCompany" placeholder="Search company...">
+          </div>
+          <div class="filter-group">
+            <label>Begin Date From</label>
+            <input type="date" id="fDateFrom">
+          </div>
+          <div class="filter-group">
+            <label>Min Amount ($)</label>
+            <input type="number" id="fAmountMin" placeholder="0" min="0">
+          </div>
+          <div class="filter-group">
+            <label>Max Amount ($)</label>
+            <input type="number" id="fAmountMax" placeholder="Any" min="0">
+          </div>
+          <div class="filter-group">
+            <label>Commodity Type</label>
+            <select id="fType"><option value="">All Types</option></select>
+          </div>
+          <div class="filter-group">
+            <button class="btn-clear" id="btnClear">Clear Filters</button>
+          </div>
         </div>
       </div>
-    </div>
-
-    <!-- Results -->
-    <div class="results-bar">
-      <span>Showing <strong id="resultCount">0</strong> of <strong id="totalCount">0</strong> contracts</span>
-      <span>Total filtered value: <strong id="filteredValue">$0</strong> &nbsp; <button class="btn-export" id="btnExport">Export CSV</button></span>
-    </div>
-    <div class="table-wrap">
-      <table>
-        <thead><tr id="tableHead"></tr></thead>
-        <tbody id="tableBody"></tbody>
-      </table>
+      <div class="results-bar">
+        <span>Showing <strong id="resultCount">0</strong> of <strong id="totalCount">0</strong> contracts</span>
+        <span>Total filtered value: <strong id="filteredValue">$0</strong> &nbsp; <button class="btn-export" id="btnExport">Export CSV</button></span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr id="tableHead"></tr></thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
     </div>
   </div>
+
+  <!-- ===== OSHA TAB ===== -->
+  <div id="panelOsha" style="display:none;">
+    <div id="oshaLoading" class="loading">Loading OSHA inspection data...</div>
+    <div id="oshaError" class="error" style="display:none;"></div>
+    <div id="oshaContent" style="display:none;">
+      <div class="filters">
+        <h2>Filter OSHA Leads</h2>
+        <div class="filter-grid">
+          <div class="filter-group">
+            <label>State</label>
+            <select id="ofState"><option value="">All States</option></select>
+          </div>
+          <div class="filter-group">
+            <label>Company Name</label>
+            <input type="text" id="ofCompany" placeholder="Search company...">
+          </div>
+          <div class="filter-group">
+            <label>Industry</label>
+            <select id="ofIndustry"><option value="">All Industries</option></select>
+          </div>
+          <div class="filter-group">
+            <label>Inspection Type</label>
+            <select id="ofInspType"><option value="">All Types</option></select>
+          </div>
+          <div class="filter-group">
+            <button class="btn-clear" id="oBtnClear">Clear Filters</button>
+          </div>
+        </div>
+      </div>
+      <div class="results-bar">
+        <span>Showing <strong id="oResultCount">0</strong> of <strong id="oTotalCount">0</strong> companies</span>
+        <span><button class="btn-export" id="oBtnExport">Export CSV</button></span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr id="oTableHead"></tr></thead>
+          <tbody id="oTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
 </div>
-<footer>Data source: Government Procurement Portals &bull; Auto-updated from Google Sheets</footer>
+<footer>Data source: Government Procurement Portals &amp; OSHA IMIS &bull; Auto-updated from Google Sheets</footer>
 
 <script>
-// Google Sheets CSV URL
 const SHEET_ID = '1HQMnHzPrx0Qa4ijuaR0BcVptpiiVG7mE3Po17rvruKQ';
-const SHEET_NAME = 'Webscraper Tool for Procurement Sites Two';
-const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(SHEET_NAME)}`;
+const CONTRACTS_SHEET = 'Webscraper Tool for Procurement Sites Two';
+const OSHA_SHEET = 'OSHA company audits';
+const csvUrl = s => `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(s)}`;
 
-let DATA = [];
+let CONTRACTS_DATA = [];
+let OSHA_DATA = [];
+let contractsLoaded = false;
+let oshaLoaded = false;
 
+// ── Tab switching ──────────────────────────────────────────────
+function switchTab(tab) {
+  document.getElementById('panelContracts').style.display = tab === 'contracts' ? '' : 'none';
+  document.getElementById('panelOsha').style.display      = tab === 'osha'      ? '' : 'none';
+  document.getElementById('tabContracts').classList.toggle('active', tab === 'contracts');
+  document.getElementById('tabOsha').classList.toggle('active', tab === 'osha');
+  if (tab === 'osha' && !oshaLoaded) loadOsha();
+}
+
+// ── CSV parser ─────────────────────────────────────────────────
+function parseAllCSV(csv) {
+  const rows = [];
+  let cur = '', inQ = false, row = [];
+  for (let i = 0; i < csv.length; i++) {
+    const c = csv[i];
+    if (c === '"') {
+      if (inQ && csv[i+1] === '"') { cur += '"'; i++; } else inQ = !inQ;
+    } else if (c === ',' && !inQ) {
+      row.push(cur); cur = '';
+    } else if ((c === '\n' || c === '\r') && !inQ) {
+      row.push(cur); cur = '';
+      if (row.length > 0) rows.push(row);
+      row = [];
+      if (c === '\r' && csv[i+1] === '\n') i++;
+    } else cur += c;
+  }
+  if (cur || row.length) { row.push(cur); rows.push(row); }
+  return rows;
+}
+
+const fmtWebsite = v => {
+  if (!v) return '';
+  try {
+    const u = v.startsWith('http') ? v : 'https://' + v;
+    return '<a href="' + u + '" target="_blank">' + new URL(u).hostname.replace(/^www\./, '') + '</a>';
+  } catch(e) { return v; }
+};
+
+// ── CONTRACTS ─────────────────────────────────────────────────
 const COLS = [
-  {key:"state",label:"State/City"},
-  {key:"company",label:"Company"},
-  {key:"website",label:"Website",fmt:v=>{if(!v)return '';try{const u=v.startsWith('http')?v:'https://'+v;return '<a href="'+u+'" target="_blank">'+new URL(u).hostname.replace(/^www\./,'')+'</a>';}catch(e){return v;}}},
-  {key:"companyInfo",label:"Company Info",expand:true},
-  {key:"contact",label:"Contact"},
-  {key:"title",label:"Title"},
-  {key:"phone",label:"Phone"},
-  {key:"email",label:"Email"},
-  {key:"amount",label:"Award Amount",fmt:v=>v?'$'+Number(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):''},
-  {key:"date",label:"Begin Date"},
-  {key:"type",label:"Commodity Type"},
-  {key:"description",label:"Description",expand:true},
-  {key:"link",label:"Link",fmt:v=>v?'<a href="'+v+'" target="_blank">View</a>':''}
+  {key:'state',    label:'State/City'},
+  {key:'company',  label:'Company'},
+  {key:'website',  label:'Website', fmt: fmtWebsite},
+  {key:'companyInfo', label:'Company Info', expand:true},
+  {key:'contact',  label:'Contact'},
+  {key:'title',    label:'Title'},
+  {key:'phone',    label:'Phone'},
+  {key:'email',    label:'Email'},
+  {key:'amount',   label:'Award Amount', fmt:v=>v?'$'+Number(v).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):''},
+  {key:'date',     label:'Begin Date'},
+  {key:'type',     label:'Commodity Type'},
+  {key:'description', label:'Description', expand:true},
+  {key:'link',     label:'Link', fmt:v=>v?'<a href="'+v+'" target="_blank">View</a>':''}
 ];
 
 const fmt$ = v => '$' + Number(v||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});
 
-// Parse CSV
-function parseCSV(csv) {
-  const lines = [];
-  let current = '';
-  let inQuotes = false;
-
-  for (let i = 0; i < csv.length; i++) {
-    const char = csv[i];
-    if (char === '"') {
-      if (inQuotes && csv[i+1] === '"') {
-        current += '"';
-        i++;
-      } else {
-        inQuotes = !inQuotes;
-      }
-    } else if (char === ',' && !inQuotes) {
-      lines.push(current);
-      current = '';
-    } else if ((char === '\n' || char === '\r') && !inQuotes) {
-      if (current || lines.length > 0) {
-        lines.push(current);
-        current = '';
-      }
-      if (lines.length > 0) {
-        return { row: lines, rest: csv.slice(i + (csv[i+1] === '\n' ? 2 : 1)) };
-      }
-    } else {
-      current += char;
-    }
-  }
-  if (current || lines.length > 0) {
-    lines.push(current);
-  }
-  return { row: lines, rest: '' };
-}
-
-function parseAllCSV(csv) {
-  const rows = [];
-  let remaining = csv.trim();
-  while (remaining) {
-    const { row, rest } = parseCSV(remaining);
-    if (row.length > 0) rows.push(row);
-    if (rest === remaining) break;
-    remaining = rest;
-  }
-  return rows;
-}
-
-// Fetch and parse data
-async function loadData() {
+async function loadContracts() {
   try {
-    const response = await fetch(CSV_URL);
-    if (!response.ok) throw new Error('Failed to fetch data');
-    const csv = await response.text();
+    const csv = await fetch(csvUrl(CONTRACTS_SHEET)).then(r => { if(!r.ok) throw new Error('Fetch failed'); return r.text(); });
     const rows = parseAllCSV(csv);
-
-    if (rows.length < 2) throw new Error('No data found in sheet');
-
-    // Skip header row, parse data
-    // Columns: City, Company Name, Contact Name, Phone, Email, Address, Website, Contract Name, Award Amount, Amount Expended, Begin Date, Award Link, Project Description, Commodity Type
-    DATA = rows.slice(1).map(row => ({
-      state: (row[0] || '').trim(),
-      company: (row[1] || '').trim(),
-      contact: (row[2] || '').trim(),
-      phone: (row[3] || '').trim(),
-      email: (row[4] || '').trim(),
-      address: (row[5] || '').trim(),
-      website: (row[6] || '').trim(),
-      contract: (row[7] || '').trim(),
-      amount: parseFloat((row[8] || '0').replace(/[$,]/g, '')) || 0,
-      amountExpended: parseFloat((row[9] || '0').replace(/[$,]/g, '')) || 0,
-      date: (row[10] || '').trim(),
-      link: (row[11] || '').trim(),
-      description: (row[12] || '').trim(),
-      type: (row[13] || '').trim(),
-      companyInfo: (row[14] || '').trim(),
-      title: (row[15] || '').trim()
-    })).filter(d => d.company); // Filter out empty rows
-
-    document.getElementById('loadingMsg').style.display = 'none';
-    document.getElementById('mainContent').style.display = 'block';
-    initUI();
-  } catch (err) {
-    document.getElementById('loadingMsg').style.display = 'none';
-    document.getElementById('errorMsg').style.display = 'block';
-    document.getElementById('errorMsg').textContent = 'Error loading data: ' + err.message + '. Make sure the Google Sheet is shared publicly.';
+    if (rows.length < 2) throw new Error('No data');
+    CONTRACTS_DATA = rows.slice(1).map(row => ({
+      state: (row[0]||'').trim(), company: (row[1]||'').trim(),
+      contact: (row[2]||'').trim(), phone: (row[3]||'').trim(),
+      email: (row[4]||'').trim(), address: (row[5]||'').trim(),
+      website: (row[6]||'').trim(), contract: (row[7]||'').trim(),
+      amount: parseFloat((row[8]||'0').replace(/[$,]/g,''))||0,
+      date: (row[10]||'').trim(), link: (row[11]||'').trim(),
+      description: (row[12]||'').trim(), type: (row[13]||'').trim(),
+      companyInfo: (row[14]||'').trim(), title: (row[15]||'').trim()
+    })).filter(d => d.company);
+    contractsLoaded = true;
+    document.getElementById('contractsLoading').style.display = 'none';
+    document.getElementById('contractsContent').style.display = '';
+    initContractsUI();
+  } catch(err) {
+    document.getElementById('contractsLoading').style.display = 'none';
+    document.getElementById('contractsError').style.display = '';
+    document.getElementById('contractsError').textContent = 'Error loading contracts: ' + err.message;
   }
 }
 
-function initUI() {
+function initContractsUI() {
   const fState = document.getElementById('fState');
-  const fType = document.getElementById('fType');
-
-  // Populate dropdowns
-  [...new Set(DATA.map(d=>d.state))].filter(Boolean).sort().forEach(s=>{
+  const fType  = document.getElementById('fType');
+  [...new Set(CONTRACTS_DATA.map(d=>d.state))].filter(Boolean).sort().forEach(s=>{
     const o=document.createElement('option'); o.value=s; o.textContent=s; fState.appendChild(o);
   });
-  [...new Set(DATA.map(d=>d.type))].filter(Boolean).sort().forEach(t=>{
+  [...new Set(CONTRACTS_DATA.map(d=>d.type))].filter(Boolean).sort().forEach(t=>{
     const o=document.createElement('option'); o.value=t; o.textContent=t; fType.appendChild(o);
   });
-
-  document.getElementById('totalCount').textContent = DATA.length;
-
-  // Table header
+  document.getElementById('totalCount').textContent = CONTRACTS_DATA.length;
   const thead = document.getElementById('tableHead');
   COLS.forEach(c=>{
-    const th = document.createElement('th');
-    th.textContent = c.label;
-    th.dataset.key = c.key;
-    if(c.key === sortKey) th.classList.add('sorted-desc');
-    th.onclick = () => {
-      if(sortKey === c.key){ sortAsc = !sortAsc; } else { sortKey = c.key; sortAsc = true; }
-      thead.querySelectorAll('th').forEach(t=>t.classList.remove('sorted-asc','sorted-desc'));
-      th.classList.add(sortAsc ? 'sorted-asc' : 'sorted-desc');
-      renderTable();
-    };
+    const th=document.createElement('th'); th.textContent=c.label; th.dataset.key=c.key;
+    th.onclick=()=>{ if(cSortKey===c.key){cSortAsc=!cSortAsc;}else{cSortKey=c.key;cSortAsc=true;} thead.querySelectorAll('th').forEach(t=>t.classList.remove('sorted-asc','sorted-desc')); th.classList.add(cSortAsc?'sorted-asc':'sorted-desc'); renderContracts(); };
     thead.appendChild(th);
   });
-
-  // Bind filter events
-  ['fCompany','fDateFrom','fAmountMin','fAmountMax'].forEach(id=>{
-    document.getElementById(id).addEventListener('input', renderTable);
+  ['fCompany','fDateFrom','fAmountMin','fAmountMax'].forEach(id=>document.getElementById(id).addEventListener('input',renderContracts));
+  fState.addEventListener('change',renderContracts);
+  fType.addEventListener('change',renderContracts);
+  document.getElementById('btnClear').addEventListener('click',()=>{
+    ['fCompany','fDateFrom','fAmountMin','fAmountMax'].forEach(id=>document.getElementById(id).value='');
+    fState.value=''; fType.value=''; renderContracts();
   });
-  fState.addEventListener('change', renderTable);
-  fType.addEventListener('change', renderTable);
-
-  document.getElementById('btnClear').addEventListener('click', ()=>{
-    document.getElementById('fCompany').value = '';
-    document.getElementById('fDateFrom').value = '';
-    document.getElementById('fAmountMin').value = '';
-    document.getElementById('fAmountMax').value = '';
-    fState.value = '';
-    fType.value = '';
-    renderTable();
-  });
-
-  document.getElementById('btnExport').addEventListener('click', exportCSV);
-
-  renderTable();
+  document.getElementById('btnExport').addEventListener('click',exportContracts);
+  renderContracts();
 }
 
-let sortKey = 'amount', sortAsc = false;
-const tbody = document.getElementById('tableBody');
+let cSortKey='amount', cSortAsc=false;
 
-function getFiltered(){
-  const stateQ = document.getElementById('fState').value;
-  const compQ = document.getElementById('fCompany').value.toLowerCase();
-  const dateFrom = document.getElementById('fDateFrom').value;
-  const amtMin = document.getElementById('fAmountMin').value;
-  const amtMax = document.getElementById('fAmountMax').value;
-  const type = document.getElementById('fType').value;
-
-  return DATA.filter(d => {
-    if(stateQ && d.state !== stateQ) return false;
+function getFilteredContracts(){
+  const stateQ=document.getElementById('fState').value, compQ=document.getElementById('fCompany').value.toLowerCase(),
+        dateFrom=document.getElementById('fDateFrom').value, amtMin=document.getElementById('fAmountMin').value,
+        amtMax=document.getElementById('fAmountMax').value, type=document.getElementById('fType').value;
+  return CONTRACTS_DATA.filter(d=>{
+    if(stateQ && d.state!==stateQ) return false;
     if(compQ && !d.company.toLowerCase().includes(compQ)) return false;
-    if(dateFrom && d.date < dateFrom) return false;
-    if(amtMin && d.amount < Number(amtMin)) return false;
-    if(amtMax && d.amount > Number(amtMax)) return false;
-    if(type && d.type !== type) return false;
+    if(dateFrom && d.date<dateFrom) return false;
+    if(amtMin && d.amount<Number(amtMin)) return false;
+    if(amtMax && d.amount>Number(amtMax)) return false;
+    if(type && d.type!==type) return false;
     return true;
   });
 }
 
-function renderTable(){
-  let rows = getFiltered();
-  document.getElementById('resultCount').textContent = rows.length;
-  document.getElementById('filteredValue').textContent = fmt$(rows.reduce((s,d)=>s+d.amount,0));
+function renderContracts(){
+  let rows=getFilteredContracts();
+  document.getElementById('resultCount').textContent=rows.length;
+  document.getElementById('filteredValue').textContent=fmt$(rows.reduce((s,d)=>s+d.amount,0));
+  rows.sort((a,b)=>{let va=a[cSortKey],vb=b[cSortKey]; return typeof va==='number'?(cSortAsc?va-vb:vb-va):(cSortAsc?String(va||'').localeCompare(String(vb||'')):String(vb||'').localeCompare(String(va||'')));});
+  const tbody=document.getElementById('tableBody');
+  if(!rows.length){tbody.innerHTML='<tr><td colspan="'+COLS.length+'" class="no-results">No contracts match the current filters.</td></tr>';return;}
+  tbody.innerHTML=rows.map(d=>'<tr>'+COLS.map(c=>{const v=d[c.key],display=c.fmt?c.fmt(v):(v||''),isLong=c.expand&&typeof v==='string'&&v.length>30,cls=isLong?' class="expandable"':'';return '<td'+cls+' title="'+(typeof v==='string'?v.replace(/"/g,'&quot;'):(v||''))+'">'+display+'</td>';}).join('')+'</tr>').join('');
+  tbody.querySelectorAll('td.expandable').forEach(td=>td.addEventListener('click',function(e){if(e.target.tagName==='A')return;this.classList.toggle('expanded');this.classList.toggle('expandable');}));
+}
 
-  rows.sort((a,b)=>{
-    let va=a[sortKey], vb=b[sortKey];
-    if(typeof va==='number') return sortAsc? va-vb : vb-va;
-    return sortAsc? String(va||'').localeCompare(String(vb||'')) : String(vb||'').localeCompare(String(va||''));
-  });
+function exportContracts(){
+  const rows=getFilteredContracts(); if(!rows.length){alert('No data to export');return;}
+  const exportCols=[{key:'state',label:'State/City'},{key:'company',label:'Company'},{key:'website',label:'Website'},{key:'companyInfo',label:'Company Info'},{key:'contact',label:'Contact'},{key:'title',label:'Title'},{key:'phone',label:'Phone'},{key:'email',label:'Email'},{key:'amount',label:'Award Amount'},{key:'date',label:'Begin Date'},{key:'type',label:'Commodity Type'},{key:'description',label:'Description'},{key:'link',label:'Link'}];
+  const esc=v=>{if(v==null)return '';const s=String(v);return(s.includes(',')||s.includes('"')||s.includes('\n'))?'"'+s.replace(/"/g,'""')+'"':s;};
+  let csv=exportCols.map(c=>esc(c.label)).join(',')+'\n';
+  rows.forEach(d=>{csv+=exportCols.map(c=>esc(d[c.key])).join(',')+'\n';});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'})); a.download='contracts_'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
+}
 
-  if(rows.length === 0){
-    tbody.innerHTML = '<tr><td colspan="'+COLS.length+'" class="no-results">No contracts match the current filters.</td></tr>';
-    return;
+// ── OSHA ──────────────────────────────────────────────────────
+const OSHA_COLS = [
+  {key:'company',   label:'Company'},
+  {key:'city',      label:'City'},
+  {key:'state',     label:'State'},
+  {key:'address',   label:'Address'},
+  {key:'naicsCode', label:'NAICS Code'},
+  {key:'industry',  label:'Industry'},
+  {key:'inspDate',  label:'Inspection Date'},
+  {key:'inspType',  label:'Inspection Type'},
+  {key:'oshaLink',  label:'OSHA Link', fmt:v=>v?'<a href="'+v+'" target="_blank">View</a>':''},
+  {key:'website',   label:'Website', fmt: fmtWebsite},
+  {key:'contactName',label:'Contact Name'},
+  {key:'title',     label:'Title'},
+  {key:'email',     label:'Email'},
+  {key:'phone',     label:'Phone'},
+  {key:'companyInfo',label:'Company Info', expand:true}
+];
+
+async function loadOsha() {
+  try {
+    const csv = await fetch(csvUrl(OSHA_SHEET)).then(r => { if(!r.ok) throw new Error('Fetch failed'); return r.text(); });
+    const rows = parseAllCSV(csv);
+
+    // Find 2026 header row (first row where row[0] === "Company")
+    let headerIdx = -1;
+    for (let i = 0; i < rows.length; i++) {
+      if ((rows[i][0]||'').trim() === 'Company') { headerIdx = i; break; }
+    }
+    if (headerIdx < 0) throw new Error('Could not find data header row');
+
+    // Collect 2026 data rows — stop at 2025 section marker or second "Company" header
+    let secondHeader = false;
+    OSHA_DATA = [];
+    for (let i = headerIdx + 1; i < rows.length; i++) {
+      const r = rows[i];
+      const cell0 = (r[0]||'').trim();
+      if (cell0.startsWith('===')) break;       // section 2 marker
+      if (cell0 === 'Company') break;            // second header = section 2
+      if (!cell0) continue;                      // blank row
+      OSHA_DATA.push({
+        company:     cell0,
+        city:        (r[1]||'').trim(),
+        state:       (r[2]||'').trim(),
+        address:     (r[3]||'').trim(),
+        naicsCode:   (r[4]||'').trim(),
+        industry:    (r[5]||'').trim(),
+        inspDate:    (r[6]||'').trim(),
+        inspType:    (r[7]||'').trim(),
+        // r[8]=Scope r[9]=Violations r[10]=Serious r[11]=Willful r[12]=Repeat r[13]=InitPenalty r[14]=CurPenalty r[15]=Priority
+        oshaLink:    (r[16]||'').trim(),
+        website:     (r[17]||'').trim(),
+        contactName: (r[18]||'').trim(),
+        title:       (r[19]||'').trim(),
+        email:       (r[20]||'').trim(),
+        phone:       (r[21]||'').trim(),
+        companyInfo: (r[22]||'').trim()
+      });
+    }
+
+    oshaLoaded = true;
+    document.getElementById('oshaLoading').style.display = 'none';
+    document.getElementById('oshaContent').style.display = '';
+    initOshaUI();
+  } catch(err) {
+    document.getElementById('oshaLoading').style.display = 'none';
+    document.getElementById('oshaError').style.display = '';
+    document.getElementById('oshaError').textContent = 'Error loading OSHA data: ' + err.message;
   }
-  tbody.innerHTML = rows.map(d=>
-    '<tr>'+COLS.map(c=>{
-      const v = d[c.key];
-      const display = c.fmt ? c.fmt(v) : (v || '');
-      const isLong = c.expand && typeof v === 'string' && v.length > 30;
-      const cls = isLong ? ' class="expandable"' : '';
-      return '<td'+cls+' title="'+(typeof v==='string'?v.replace(/"/g,'&quot;'):(v||''))+'">'+display+'</td>';
-    }).join('')+'</tr>'
-  ).join('');
+}
 
-  // Bind expand/collapse on expandable cells
-  tbody.querySelectorAll('td.expandable').forEach(td=>{
-    td.addEventListener('click', function(e){
-      if(e.target.tagName === 'A') return; // Don't interfere with links
-      this.classList.toggle('expanded');
-      this.classList.toggle('expandable');
-    });
+function initOshaUI() {
+  const ofState   = document.getElementById('ofState');
+  const ofIndustry= document.getElementById('ofIndustry');
+  const ofInspType= document.getElementById('ofInspType');
+
+  [...new Set(OSHA_DATA.map(d=>d.state))].filter(Boolean).sort().forEach(s=>{
+    const o=document.createElement('option'); o.value=s; o.textContent=s; ofState.appendChild(o);
+  });
+  [...new Set(OSHA_DATA.map(d=>d.industry))].filter(Boolean).sort().forEach(s=>{
+    const o=document.createElement('option'); o.value=s; o.textContent=s; ofIndustry.appendChild(o);
+  });
+  [...new Set(OSHA_DATA.map(d=>d.inspType))].filter(Boolean).sort().forEach(s=>{
+    const o=document.createElement('option'); o.value=s; o.textContent=s; ofInspType.appendChild(o);
+  });
+
+  document.getElementById('oTotalCount').textContent = OSHA_DATA.length;
+
+  const thead = document.getElementById('oTableHead');
+  OSHA_COLS.forEach(c=>{
+    const th=document.createElement('th'); th.textContent=c.label; th.dataset.key=c.key;
+    th.onclick=()=>{ if(oSortKey===c.key){oSortAsc=!oSortAsc;}else{oSortKey=c.key;oSortAsc=true;} thead.querySelectorAll('th').forEach(t=>t.classList.remove('sorted-asc','sorted-desc')); th.classList.add(oSortAsc?'sorted-asc':'sorted-desc'); renderOsha(); };
+    thead.appendChild(th);
+  });
+
+  document.getElementById('ofCompany').addEventListener('input', renderOsha);
+  ofState.addEventListener('change', renderOsha);
+  ofIndustry.addEventListener('change', renderOsha);
+  ofInspType.addEventListener('change', renderOsha);
+  document.getElementById('oBtnClear').addEventListener('click', ()=>{
+    document.getElementById('ofCompany').value='';
+    ofState.value=''; ofIndustry.value=''; ofInspType.value='';
+    renderOsha();
+  });
+  document.getElementById('oBtnExport').addEventListener('click', exportOsha);
+  renderOsha();
+}
+
+let oSortKey='inspDate', oSortAsc=false;
+
+function getFilteredOsha(){
+  const stateQ=document.getElementById('ofState').value, compQ=document.getElementById('ofCompany').value.toLowerCase(),
+        industryQ=document.getElementById('ofIndustry').value, inspTypeQ=document.getElementById('ofInspType').value;
+  return OSHA_DATA.filter(d=>{
+    if(stateQ && d.state!==stateQ) return false;
+    if(compQ && !d.company.toLowerCase().includes(compQ)) return false;
+    if(industryQ && d.industry!==industryQ) return false;
+    if(inspTypeQ && d.inspType!==inspTypeQ) return false;
+    return true;
   });
 }
 
-function exportCSV(){
-  const rows = getFiltered();
-  if(rows.length === 0){ alert('No data to export'); return; }
-
-  // CSV headers (exclude Link column for cleaner export, add raw link URL instead)
-  const exportCols = [
-    {key:"state",label:"State/City"},
-    {key:"company",label:"Company"},
-    {key:"website",label:"Website"},
-    {key:"companyInfo",label:"Company Info"},
-    {key:"contact",label:"Contact"},
-    {key:"title",label:"Title"},
-    {key:"phone",label:"Phone"},
-    {key:"email",label:"Email"},
-    {key:"amount",label:"Award Amount"},
-    {key:"date",label:"Begin Date"},
-    {key:"type",label:"Commodity Type"},
-    {key:"description",label:"Description"},
-    {key:"link",label:"Link"}
-  ];
-
-  const escapeCSV = v => {
-    if(v == null) return '';
-    const s = String(v);
-    if(s.includes(',') || s.includes('"') || s.includes('\n')) return '"' + s.replace(/"/g, '""') + '"';
-    return s;
-  };
-
-  let csv = exportCols.map(c => escapeCSV(c.label)).join(',') + '\n';
-  rows.forEach(d => {
-    csv += exportCols.map(c => escapeCSV(d[c.key])).join(',') + '\n';
-  });
-
-  const blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'construction_contracts_' + new Date().toISOString().slice(0,10) + '.csv';
-  a.click();
-  URL.revokeObjectURL(url);
+function renderOsha(){
+  let rows=getFilteredOsha();
+  document.getElementById('oResultCount').textContent=rows.length;
+  rows.sort((a,b)=>{let va=a[oSortKey],vb=b[oSortKey];return typeof va==='number'?(oSortAsc?va-vb:vb-va):(oSortAsc?String(va||'').localeCompare(String(vb||'')):String(vb||'').localeCompare(String(va||'')));});
+  const tbody=document.getElementById('oTableBody');
+  if(!rows.length){tbody.innerHTML='<tr><td colspan="'+OSHA_COLS.length+'" class="no-results">No results match the current filters.</td></tr>';return;}
+  tbody.innerHTML=rows.map(d=>'<tr>'+OSHA_COLS.map(c=>{const v=d[c.key],display=c.fmt?c.fmt(v):(v||''),isLong=c.expand&&typeof v==='string'&&v.length>30,cls=isLong?' class="expandable"':'';return '<td'+cls+' title="'+(typeof v==='string'?v.replace(/"/g,'&quot;'):(v||''))+'">'+display+'</td>';}).join('')+'</tr>').join('');
+  tbody.querySelectorAll('td.expandable').forEach(td=>td.addEventListener('click',function(e){if(e.target.tagName==='A')return;this.classList.toggle('expanded');this.classList.toggle('expandable');}));
 }
 
-// Load data on page load
-loadData();
+function exportOsha(){
+  const rows=getFilteredOsha(); if(!rows.length){alert('No data to export');return;}
+  const exportCols=OSHA_COLS.map(c=>({key:c.key,label:c.label}));
+  const esc=v=>{if(v==null)return '';const s=String(v);return(s.includes(',')||s.includes('"')||s.includes('\n'))?'"'+s.replace(/"/g,'""')+'"':s;};
+  let csv=exportCols.map(c=>esc(c.label)).join(',')+'\n';
+  rows.forEach(d=>{csv+=exportCols.map(c=>esc(d[c.key])).join(',')+'\n';});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'})); a.download='osha_leads_'+new Date().toISOString().slice(0,10)+'.csv'; a.click();
+}
+
+// Load contracts on start, OSHA loads on first tab click
+loadContracts();
 </script>
 </body>
 </html>
