@@ -376,6 +376,21 @@ def write_to_google_sheets(results, append=True):
         existing = get_existing_data(service)
         start_row = len(existing) + 1
 
+        # Deduplicate: skip rows already in the sheet
+        existing_fps = {
+            (row[1].strip().lower(), row[7].strip().lower())
+            for row in (existing[1:] if len(existing) > 1 else [])
+            if len(row) > 7
+        }
+        new_results = [
+            r for r in results
+            if (r.get("company_name", "").strip().lower(),
+                r.get("contract_name", "").strip().lower()) not in existing_fps
+        ]
+        if len(new_results) < len(results):
+            print(f"  Skipped {len(results) - len(new_results)} already-existing entries")
+        results = new_results
+
         if not existing:
             sheet.values().update(
                 spreadsheetId=SPREADSHEET_ID,
