@@ -377,8 +377,8 @@ def get_existing_data(service):
         return []
 
 
-def write_to_google_sheets(results, append=True):
-    """Write results to Google Sheets. If append=True, add to existing data."""
+def write_to_google_sheets(results):
+    """Append results to Google Sheets. Never clears existing data."""
     service = get_sheets_service()
     sheet = service.spreadsheets()
 
@@ -401,60 +401,41 @@ def write_to_google_sheets(results, append=True):
         sheet.batchUpdate(spreadsheetId=SPREADSHEET_ID, body=request).execute()
         print(f"Created new sheet: {SHEET_NAME}")
 
-    if append:
-        existing = get_existing_data(service)
-        start_row = len(existing) + 1
+    # APPEND ONLY — never clear the sheet.
+    # Deduplicates by (company_name, contract_name) to avoid double-writing.
+    existing = get_existing_data(service)
+    start_row = len(existing) + 1
 
-        # Deduplicate: skip rows already in the sheet
-        existing_fps = {
-            (row[1].strip().lower(), row[7].strip().lower())
-            for row in (existing[1:] if len(existing) > 1 else [])
-            if len(row) > 7
-        }
-        new_results = [
-            r for r in results
-            if (r.get("company_name", "").strip().lower(),
-                r.get("contract_name", "").strip().lower()) not in existing_fps
-        ]
-        if len(new_results) < len(results):
-            print(f"  Skipped {len(results) - len(new_results)} already-existing entries")
-        results = new_results
+    existing_fps = {
+        (row[1].strip().lower(), row[7].strip().lower())
+        for row in (existing[1:] if len(existing) > 1 else [])
+        if len(row) > 7
+    }
+    new_results = [
+        r for r in results
+        if (r.get("company_name", "").strip().lower(),
+            r.get("contract_name", "").strip().lower()) not in existing_fps
+    ]
+    if len(new_results) < len(results):
+        print(f"  Skipped {len(results) - len(new_results)} already-existing entries")
+    results = new_results
 
-        if not existing:
-            header_range = f"'{SHEET_NAME}'!A1"
-            sheet.values().update(
-                spreadsheetId=SPREADSHEET_ID,
-                range=header_range,
-                valueInputOption="RAW",
-                body={"values": [SHEET_HEADERS]}
-            ).execute()
-            start_row = 2
-
-        rows = []
-        for r in results:
-            rows.append([r.get(f, "") for f in SHEET_FIELDS])
-
-        if rows:
-            write_range = f"'{SHEET_NAME}'!A{start_row}"
-            sheet.values().update(
-                spreadsheetId=SPREADSHEET_ID,
-                range=write_range,
-                valueInputOption="RAW",
-                body={"values": rows}
-            ).execute()
-    else:
-        rows = [SHEET_HEADERS]
-        for r in results:
-            rows.append([r.get(f, "") for f in SHEET_FIELDS])
-
-        clear_range = f"'{SHEET_NAME}'!A1:Z1000"
-        sheet.values().clear(
+    if not existing:
+        header_range = f"'{SHEET_NAME}'!A1"
+        sheet.values().update(
             spreadsheetId=SPREADSHEET_ID,
-            range=clear_range,
-            body={}
+            range=header_range,
+            valueInputOption="RAW",
+            body={"values": [SHEET_HEADERS]}
         ).execute()
+        start_row = 2
 
-        write_range = f"'{SHEET_NAME}'!A1"
+    rows = []
+    for r in results:
+        rows.append([r.get(f, "") for f in SHEET_FIELDS])
+
+    if rows:
+        write_range = f"'{SHEET_NAME}'!A{start_row}"
         sheet.values().update(
             spreadsheetId=SPREADSHEET_ID,
             range=write_range,
@@ -468,10 +449,6 @@ def write_to_google_sheets(results, append=True):
 def main():
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--append", action="store_true", default=True,
-                        help="Append to existing sheet data (default)")
-    parser.add_argument("--replace", action="store_true",
-                        help="Replace existing sheet data instead of appending")
     args = parser.parse_args()
 
     results = scrape_all()
@@ -479,7 +456,7 @@ def main():
         print("\nNo contracts matched all filters.")
         print("Try adjusting MIN_DATE or NAICS_FILTERS if this is unexpected.")
         sys.exit(0)
-    write_to_google_sheets(results, append=not args.replace)
+    write_to_google_sheets(results)
     print(f"\nView results at: https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}")
 
 

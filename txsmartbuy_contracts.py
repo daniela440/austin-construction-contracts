@@ -324,8 +324,8 @@ def get_existing_data(service):
         return []
 
 
-def write_to_google_sheets(results, append=True):
-    """Write results to Google Sheets. If append=True, add to existing data."""
+def write_to_google_sheets(results):
+    """Append results to Google Sheets. Never clears existing data."""
     service = get_sheets_service()
     sheet = service.spreadsheets()
 
@@ -347,40 +347,25 @@ def write_to_google_sheets(results, append=True):
         sheet.batchUpdate(spreadsheetId=SPREADSHEET_ID, body=request).execute()
         print(f"Created new sheet: {SHEET_NAME}")
 
-    if append:
-        existing = get_existing_data(service)
-        start_row = len(existing) + 1
+    # APPEND ONLY — never clear the sheet.
+    # Deduplicates by (company_name, contract_name) to avoid double-writing.
+    existing = get_existing_data(service)
+    start_row = len(existing) + 1
 
-        if not existing:
-            sheet.values().update(
-                spreadsheetId=SPREADSHEET_ID,
-                range=f"'{SHEET_NAME}'!A1",
-                valueInputOption="RAW",
-                body={"values": [SHEET_HEADERS]}
-            ).execute()
-            start_row = 2
-
-        rows = [[r.get(f, "") for f in SHEET_FIELDS] for r in results]
-        if rows:
-            sheet.values().update(
-                spreadsheetId=SPREADSHEET_ID,
-                range=f"'{SHEET_NAME}'!A{start_row}",
-                valueInputOption="RAW",
-                body={"values": rows}
-            ).execute()
-    else:
-        rows = [SHEET_HEADERS] + [[r.get(f, "") for f in SHEET_FIELDS] for r in results]
-        try:
-            sheet.values().clear(
-                spreadsheetId=SPREADSHEET_ID,
-                range=f"'{SHEET_NAME}'!A1:Z1000",
-                body={}
-            ).execute()
-        except Exception:
-            pass
+    if not existing:
         sheet.values().update(
             spreadsheetId=SPREADSHEET_ID,
             range=f"'{SHEET_NAME}'!A1",
+            valueInputOption="RAW",
+            body={"values": [SHEET_HEADERS]}
+        ).execute()
+        start_row = 2
+
+    rows = [[r.get(f, "") for f in SHEET_FIELDS] for r in results]
+    if rows:
+        sheet.values().update(
+            spreadsheetId=SPREADSHEET_ID,
+            range=f"'{SHEET_NAME}'!A{start_row}",
             valueInputOption="RAW",
             body={"values": rows}
         ).execute()
@@ -391,8 +376,6 @@ def write_to_google_sheets(results, append=True):
 def main():
     import argparse
     parser = argparse.ArgumentParser(description="TxSmartBuy Construction Contracts Scraper")
-    parser.add_argument("--append", action="store_true", default=True, help="Append to existing data (default)")
-    parser.add_argument("--replace", action="store_true", help="Replace existing data")
     args = parser.parse_args()
 
     results = scrape_all()
@@ -401,7 +384,7 @@ def main():
         print("This is expected if TxSmartBuy doesn't have construction contracts.")
         sys.exit(0)
 
-    write_to_google_sheets(results, append=not args.replace)
+    write_to_google_sheets(results)
     print(f"\nView results at: https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}")
 
 

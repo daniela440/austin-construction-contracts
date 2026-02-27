@@ -245,7 +245,7 @@ def get_existing_data(service):
         return []
 
 
-def write_to_google_sheets(results, append=True):
+def write_to_google_sheets(results):
     service = get_sheets_service()
     sheet = service.spreadsheets()
 
@@ -264,56 +264,41 @@ def write_to_google_sheets(results, append=True):
         ).execute()
         print(f"Created new sheet: {SHEET_NAME}")
 
-    if append:
-        existing = get_existing_data(service)
-        start_row = len(existing) + 1
+    # APPEND ONLY — always add to existing data, never clear the sheet.
+    # Deduplicates by (company_name, contract_name) to avoid double-writing.
+    existing = get_existing_data(service)
+    start_row = len(existing) + 1
 
-        existing_fps = {
-            (row[1].strip().lower(), row[7].strip().lower())
-            for row in (existing[1:] if len(existing) > 1 else [])
-            if len(row) > 7
-        }
-        new_results = [
-            r for r in results
-            if (
-                r.get("company_name", "").strip().lower(),
-                r.get("contract_name", "").strip().lower(),
-            ) not in existing_fps
-        ]
-        if len(new_results) < len(results):
-            print(f"  Skipped {len(results) - len(new_results)} already-existing entries")
-        results = new_results
+    existing_fps = {
+        (row[1].strip().lower(), row[7].strip().lower())
+        for row in (existing[1:] if len(existing) > 1 else [])
+        if len(row) > 7
+    }
+    new_results = [
+        r for r in results
+        if (
+            r.get("company_name", "").strip().lower(),
+            r.get("contract_name", "").strip().lower(),
+        ) not in existing_fps
+    ]
+    if len(new_results) < len(results):
+        print(f"  Skipped {len(results) - len(new_results)} already-existing entries")
+    results = new_results
 
-        if not existing:
-            sheet.values().update(
-                spreadsheetId=SPREADSHEET_ID,
-                range=f"'{SHEET_NAME}'!A1",
-                valueInputOption="RAW",
-                body={"values": [SHEET_HEADERS]},
-            ).execute()
-            start_row = 2
-
-        rows = [[r.get(f, "") for f in SHEET_FIELDS] for r in results]
-        if rows:
-            sheet.values().update(
-                spreadsheetId=SPREADSHEET_ID,
-                range=f"'{SHEET_NAME}'!A{start_row}",
-                valueInputOption="RAW",
-                body={"values": rows},
-            ).execute()
-    else:
-        rows = [SHEET_HEADERS] + [[r.get(f, "") for f in SHEET_FIELDS] for r in results]
-        try:
-            sheet.values().clear(
-                spreadsheetId=SPREADSHEET_ID,
-                range=f"'{SHEET_NAME}'!A1:Z1000",
-                body={},
-            ).execute()
-        except Exception:
-            pass
+    if not existing:
         sheet.values().update(
             spreadsheetId=SPREADSHEET_ID,
             range=f"'{SHEET_NAME}'!A1",
+            valueInputOption="RAW",
+            body={"values": [SHEET_HEADERS]},
+        ).execute()
+        start_row = 2
+
+    rows = [[r.get(f, "") for f in SHEET_FIELDS] for r in results]
+    if rows:
+        sheet.values().update(
+            spreadsheetId=SPREADSHEET_ID,
+            range=f"'{SHEET_NAME}'!A{start_row}",
             valueInputOption="RAW",
             body={"values": rows},
         ).execute()
@@ -336,7 +321,6 @@ def main():
     import argparse
     parser = argparse.ArgumentParser(description="Florida FDOT Contracts Scraper")
     parser.add_argument("--preview", action="store_true", help="Preview without writing to sheet")
-    parser.add_argument("--append", action="store_true", help="Append to existing data")
     args = parser.parse_args()
 
     results = scrape_all()
@@ -351,7 +335,7 @@ def main():
         print("Preview mode — not writing to Google Sheets")
         print(f"Run without --preview to write {len(results)} rows")
     else:
-        write_to_google_sheets(results, append=args.append)
+        write_to_google_sheets(results)
         print(f"\nView results at: https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}")
 
 
