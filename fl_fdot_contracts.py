@@ -137,12 +137,6 @@ def parse_timestamp(ts):
     return datetime.fromtimestamp(ts / 1000).strftime("%Y-%m-%d")
 
 
-def build_link(contract_id, website):
-    """Build the best available link for this contract."""
-    if website and website.startswith("http"):
-        return website
-    return SOURCE_URL
-
 
 def scrape_all():
     """Main pipeline: fetch -> filter NAICS -> deduplicate -> return results."""
@@ -163,7 +157,6 @@ def scrape_all():
         end_date = parse_timestamp(a.get("EstEndDate"))
         district = (a.get("District") or "").strip()
         county = (a.get("County") or "").strip()
-        website = (a.get("Website") or "").strip()
         fin_proj = (a.get("FinProjNum") or "").strip()
 
         # Infer NAICS from description
@@ -178,7 +171,7 @@ def scrape_all():
         seen.add(contract_id)
 
         location = f"Florida - {county} County, District {district}".strip(" -,")
-        link = build_link(contract_id, website)
+        link = SOURCE_URL
 
         matched.append({
             "city": location,
@@ -187,7 +180,7 @@ def scrape_all():
             "phone": "",
             "email": "",
             "address": "",
-            "website": website,
+            "website": "",
             "contract_name": f"FDOT Contract {contract_id}: {description}",
             "award_amount": cost,
             "amount_expended": 0.0,
