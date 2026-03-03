@@ -276,7 +276,8 @@ const COLS = [
   {key:'date',     label:'Begin Date'},
   {key:'type',     label:'Commodity Type'},
   {key:'description', label:'Description', expand:true},
-  {key:'link',     label:'Link', fmt:v=>v?'<a href="'+v+'" target="_blank">View</a>':''}
+  {key:'link',     label:'Link', fmt:v=>v?'<a href="'+v+'" target="_blank">View</a>':''},
+  {key:'inHubSpot', label:'In HubSpot?'}
 ];
 
 const fmt$ = v => '$' + Number(v||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});
@@ -294,7 +295,8 @@ async function loadContracts() {
       amount: parseFloat((row[8]||'0').replace(/[$,]/g,''))||0,
       date: (row[10]||'').trim(), link: (row[11]||'').trim(),
       description: (row[12]||'').trim(), type: (row[13]||'').trim(),
-      companyInfo: (row[14]||'').trim(), title: (row[15]||'').trim()
+      companyInfo: (row[14]||'').trim(), title: (row[15]||'').trim(),
+      inHubSpot: (row[16]||'').trim()
     })).filter(d => d.company);
     contractsLoaded = true;
     document.getElementById('contractsLoading').style.display = 'none';
