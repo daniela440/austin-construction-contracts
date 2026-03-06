@@ -77,14 +77,16 @@
   }
   .btn-export:hover { background: var(--indigo-700); }
 
-  /* Toggle button */
-  .toggle-btn {
-    width: 100%; padding: .45rem .9rem; border-radius: 9999px; border: 1.5px solid var(--slate-300);
-    background: #fff; color: var(--slate-600); font-size: .8rem; font-weight: 600; cursor: pointer;
-    transition: all .15s;
+  /* Segmented control */
+  .seg-ctrl { display: flex; border: 1.5px solid var(--slate-300); border-radius: 9999px; overflow: hidden; width: 100%; }
+  .seg-btn {
+    flex: 1; padding: .4rem .3rem; border: none; background: #fff; color: var(--slate-600);
+    font-size: .72rem; font-weight: 600; cursor: pointer; white-space: nowrap;
+    transition: background .15s, color .15s;
   }
-  .toggle-btn:hover:not([data-active="true"]) { background: var(--slate-100); border-color: var(--slate-400); }
-  .toggle-btn[data-active="true"] { background: var(--indigo-600); border-color: var(--indigo-600); color: #fff; }
+  .seg-btn:not(:first-child) { border-left: 1px solid var(--slate-300); }
+  .seg-btn.active { background: var(--indigo-600); color: #fff; }
+  .seg-btn:hover:not(.active) { background: var(--slate-100); }
 
   /* Results bar */
   .results-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: .5rem; font-size: .85rem; color: var(--slate-600); flex-wrap: wrap; gap: .5rem; }
@@ -180,7 +182,11 @@
           </div>
           <div class="filter-group">
             <label>HubSpot Status</label>
-            <button class="toggle-btn" id="fNotInHS" data-active="false">New Leads Only</button>
+            <div class="seg-ctrl" id="fHSFilter">
+              <button class="seg-btn active" data-val="all">All</button>
+              <button class="seg-btn" data-val="new">New Leads</button>
+              <button class="seg-btn" data-val="hs">In HubSpot</button>
+            </div>
           </div>
           <div class="filter-group">
             <button class="btn-clear" id="btnClear">Clear Filters</button>
@@ -226,7 +232,11 @@
           </div>
           <div class="filter-group">
             <label>HubSpot Status</label>
-            <button class="toggle-btn" id="ofNotInHS" data-active="false">New Leads Only</button>
+            <div class="seg-ctrl" id="ofHSFilter">
+              <button class="seg-btn active" data-val="all">All</button>
+              <button class="seg-btn" data-val="new">New Leads</button>
+              <button class="seg-btn" data-val="hs">In HubSpot</button>
+            </div>
           </div>
           <div class="filter-group">
             <button class="btn-clear" id="oBtnClear">Clear Filters</button>
@@ -319,7 +329,11 @@ const COLS = [
   {key:'type',     label:'Commodity Type'},
   {key:'description', label:'Description'},
   {key:'link',     label:'Link', fmt:v=>v?'<a href="'+v+'" target="_blank">View</a>':'', noExpand:true},
-  {key:'inHubSpot', label:'In HubSpot?', fmt:fmtHubSpot, noExpand:true}
+  {key:'inHubSpot',    label:'In HubSpot?',  fmt:fmtHubSpot, noExpand:true},
+  {key:'hsLastEngaged', label:'Last Engaged',  hsOnly:true, noExpand:true},
+  {key:'hsSiteVisits',  label:'Site Visits',   hsOnly:true, noExpand:true},
+  {key:'hsInSequence',  label:'In Sequence?',  hsOnly:true, noExpand:true},
+  {key:'hsReplies',     label:'Replies',        hsOnly:true, noExpand:true}
 ];
 
 const fmt$ = v => '$' + Number(v||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});
@@ -338,7 +352,11 @@ async function loadContracts() {
       date: (row[10]||'').trim(), link: (row[11]||'').trim(),
       description: (row[12]||'').trim(), type: (row[13]||'').trim(),
       companyInfo: (row[14]||'').trim(), title: (row[15]||'').trim(),
-      inHubSpot: (row[16]||'').trim()
+      inHubSpot:    (row[16]||'').trim(),
+      hsLastEngaged:(row[17]||'').trim(),
+      hsSiteVisits: (row[18]||'').trim(),
+      hsInSequence: (row[19]||'').trim(),
+      hsReplies:    (row[20]||'').trim()
     })).filter(d => d.company);
     contractsLoaded = true;
     document.getElementById('contractsLoading').style.display = 'none';
@@ -361,20 +379,22 @@ function initContractsUI() {
     const o=document.createElement('option'); o.value=t; o.textContent=t; fType.appendChild(o);
   });
   document.getElementById('totalCount').textContent = CONTRACTS_DATA.length;
-  const thead = document.getElementById('tableHead');
-  COLS.forEach(c=>{
-    const th=document.createElement('th'); th.textContent=c.label; th.dataset.key=c.key;
-    th.onclick=()=>{ if(cSortKey===c.key){cSortAsc=!cSortAsc;}else{cSortKey=c.key;cSortAsc=true;} thead.querySelectorAll('th').forEach(t=>t.classList.remove('sorted-asc','sorted-desc')); th.classList.add(cSortAsc?'sorted-asc':'sorted-desc'); renderContracts(); };
-    thead.appendChild(th);
-  });
   ['fCompany','fDateFrom','fAmountMin','fAmountMax'].forEach(id=>document.getElementById(id).addEventListener('input',renderContracts));
   fState.addEventListener('change',renderContracts);
   fType.addEventListener('change',renderContracts);
-  const fNotInHS = document.getElementById('fNotInHS');
-  fNotInHS.addEventListener('click',()=>{ fNotInHS.dataset.active=fNotInHS.dataset.active==='true'?'false':'true'; renderContracts(); });
+  document.querySelectorAll('#fHSFilter .seg-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      document.querySelectorAll('#fHSFilter .seg-btn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      renderContracts();
+    });
+  });
   document.getElementById('btnClear').addEventListener('click',()=>{
     ['fCompany','fDateFrom','fAmountMin','fAmountMax'].forEach(id=>document.getElementById(id).value='');
-    fState.value=''; fType.value=''; fNotInHS.dataset.active='false'; renderContracts();
+    fState.value=''; fType.value='';
+    document.querySelectorAll('#fHSFilter .seg-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelector('#fHSFilter .seg-btn[data-val="all"]').classList.add('active');
+    renderContracts();
   });
   document.getElementById('btnExport').addEventListener('click',exportContracts);
   document.getElementById('tableBody').addEventListener('click',e=>{
@@ -391,27 +411,39 @@ function getFilteredContracts(){
   const stateQ=document.getElementById('fState').value, compQ=document.getElementById('fCompany').value.toLowerCase(),
         dateFrom=document.getElementById('fDateFrom').value, amtMin=document.getElementById('fAmountMin').value,
         amtMax=document.getElementById('fAmountMax').value, type=document.getElementById('fType').value,
-        notInHS=document.getElementById('fNotInHS').dataset.active==='true';
+        hsFilter=document.querySelector('#fHSFilter .seg-btn.active').dataset.val;
   return CONTRACTS_DATA.filter(d=>{
+    if(!d.website) return false;
     if(stateQ && d.state!==stateQ) return false;
     if(compQ && !d.company.toLowerCase().includes(compQ)) return false;
     if(dateFrom && d.date<dateFrom) return false;
     if(amtMin && d.amount<Number(amtMin)) return false;
     if(amtMax && d.amount>Number(amtMax)) return false;
     if(type && d.type!==type) return false;
-    if(notInHS && d.inHubSpot==='Yes') return false;
+    if(hsFilter==='new' && d.inHubSpot==='Yes') return false;
+    if(hsFilter==='hs'  && d.inHubSpot!=='Yes') return false;
     return true;
   });
 }
 
 function renderContracts(){
+  const hsFilter=document.querySelector('#fHSFilter .seg-btn.active').dataset.val;
+  const visibleCols=COLS.filter(c=>!c.hsOnly||hsFilter==='hs');
+  const thead=document.getElementById('tableHead');
+  thead.innerHTML='';
+  visibleCols.forEach(c=>{
+    const th=document.createElement('th'); th.textContent=c.label; th.dataset.key=c.key;
+    if(cSortKey===c.key) th.classList.add(cSortAsc?'sorted-asc':'sorted-desc');
+    th.onclick=()=>{ if(cSortKey===c.key){cSortAsc=!cSortAsc;}else{cSortKey=c.key;cSortAsc=true;} renderContracts(); };
+    thead.appendChild(th);
+  });
   let rows=getFilteredContracts();
   document.getElementById('resultCount').textContent=rows.length;
   document.getElementById('filteredValue').textContent=fmt$(rows.reduce((s,d)=>s+d.amount,0));
   rows.sort((a,b)=>{let va=a[cSortKey],vb=b[cSortKey]; return typeof va==='number'?(cSortAsc?va-vb:vb-va):(cSortAsc?String(va||'').localeCompare(String(vb||'')):String(vb||'').localeCompare(String(va||'')));});
   const tbody=document.getElementById('tableBody');
-  if(!rows.length){tbody.innerHTML='<tr><td colspan="'+COLS.length+'" class="no-results">No contracts match the current filters.</td></tr>';return;}
-  tbody.innerHTML=rows.map(d=>'<tr>'+COLS.map(c=>{const v=d[c.key],display=c.fmt?c.fmt(v):(v||''),cls=c.noExpand?'':' class="expandable"',title=typeof v==='string'?v.replace(/"/g,'&quot;'):(v||'');return '<td'+cls+' title="'+title+'">'+display+'</td>';}).join('')+'</tr>').join('');
+  if(!rows.length){tbody.innerHTML='<tr><td colspan="'+visibleCols.length+'" class="no-results">No contracts match the current filters.</td></tr>';return;}
+  tbody.innerHTML=rows.map(d=>'<tr>'+visibleCols.map(c=>{const v=d[c.key],display=c.fmt?c.fmt(v):(v||''),cls=c.noExpand?'':' class="expandable"',title=typeof v==='string'?v.replace(/"/g,'&quot;'):(v||'');return '<td'+cls+' title="'+title+'">'+display+'</td>';}).join('')+'</tr>').join('');
 }
 
 function exportContracts(){
@@ -440,7 +472,11 @@ const OSHA_COLS = [
   {key:'email',     label:'Email'},
   {key:'phone',     label:'Phone'},
   {key:'companyInfo',label:'Company Info'},
-  {key:'inHubSpot', label:'In HubSpot?', fmt:fmtHubSpot, noExpand:true}
+  {key:'inHubSpot',    label:'In HubSpot?',  fmt:fmtHubSpot, noExpand:true},
+  {key:'hsLastEngaged', label:'Last Engaged',  hsOnly:true, noExpand:true},
+  {key:'hsSiteVisits',  label:'Site Visits',   hsOnly:true, noExpand:true},
+  {key:'hsInSequence',  label:'In Sequence?',  hsOnly:true, noExpand:true},
+  {key:'hsReplies',     label:'Replies',        hsOnly:true, noExpand:true}
 ];
 
 async function loadOsha() {
@@ -472,8 +508,12 @@ async function loadOsha() {
         title:       (r[19]||'').trim(),
         email:       (r[20]||'').trim(),
         phone:       (r[21]||'').trim(),
-        companyInfo: (r[22]||'').trim(),
-        inHubSpot:   (r[23]||'').trim()
+        companyInfo:  (r[22]||'').trim(),
+        inHubSpot:    (r[23]||'').trim(),
+        hsLastEngaged:(r[24]||'').trim(),
+        hsSiteVisits: (r[25]||'').trim(),
+        hsInSequence: (r[26]||'').trim(),
+        hsReplies:    (r[27]||'').trim()
       });
     }
 
@@ -505,22 +545,22 @@ function initOshaUI() {
 
   document.getElementById('oTotalCount').textContent = OSHA_DATA.length;
 
-  const thead = document.getElementById('oTableHead');
-  OSHA_COLS.forEach(c=>{
-    const th=document.createElement('th'); th.textContent=c.label; th.dataset.key=c.key;
-    th.onclick=()=>{ if(oSortKey===c.key){oSortAsc=!oSortAsc;}else{oSortKey=c.key;oSortAsc=true;} thead.querySelectorAll('th').forEach(t=>t.classList.remove('sorted-asc','sorted-desc')); th.classList.add(oSortAsc?'sorted-asc':'sorted-desc'); renderOsha(); };
-    thead.appendChild(th);
-  });
-
   document.getElementById('ofCompany').addEventListener('input', renderOsha);
   ofState.addEventListener('change', renderOsha);
   ofIndustry.addEventListener('change', renderOsha);
   ofInspType.addEventListener('change', renderOsha);
-  const ofNotInHS = document.getElementById('ofNotInHS');
-  ofNotInHS.addEventListener('click',()=>{ ofNotInHS.dataset.active=ofNotInHS.dataset.active==='true'?'false':'true'; renderOsha(); });
+  document.querySelectorAll('#ofHSFilter .seg-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      document.querySelectorAll('#ofHSFilter .seg-btn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      renderOsha();
+    });
+  });
   document.getElementById('oBtnClear').addEventListener('click', ()=>{
     document.getElementById('ofCompany').value='';
-    ofState.value=''; ofIndustry.value=''; ofInspType.value=''; ofNotInHS.dataset.active='false';
+    ofState.value=''; ofIndustry.value=''; ofInspType.value='';
+    document.querySelectorAll('#ofHSFilter .seg-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelector('#ofHSFilter .seg-btn[data-val="all"]').classList.add('active');
     renderOsha();
   });
   document.getElementById('oBtnExport').addEventListener('click', exportOsha);
@@ -537,24 +577,36 @@ let oSortKey='inspDate', oSortAsc=false;
 function getFilteredOsha(){
   const stateQ=document.getElementById('ofState').value, compQ=document.getElementById('ofCompany').value.toLowerCase(),
         industryQ=document.getElementById('ofIndustry').value, inspTypeQ=document.getElementById('ofInspType').value,
-        notInHS=document.getElementById('ofNotInHS').dataset.active==='true';
+        hsFilter=document.querySelector('#ofHSFilter .seg-btn.active').dataset.val;
   return OSHA_DATA.filter(d=>{
+    if(!d.website) return false;
     if(stateQ && d.state!==stateQ) return false;
     if(compQ && !d.company.toLowerCase().includes(compQ)) return false;
     if(industryQ && d.industry!==industryQ) return false;
     if(inspTypeQ && d.inspType!==inspTypeQ) return false;
-    if(notInHS && d.inHubSpot==='Yes') return false;
+    if(hsFilter==='new' && d.inHubSpot==='Yes') return false;
+    if(hsFilter==='hs'  && d.inHubSpot!=='Yes') return false;
     return true;
   });
 }
 
 function renderOsha(){
+  const hsFilter=document.querySelector('#ofHSFilter .seg-btn.active').dataset.val;
+  const visibleCols=OSHA_COLS.filter(c=>!c.hsOnly||hsFilter==='hs');
+  const thead=document.getElementById('oTableHead');
+  thead.innerHTML='';
+  visibleCols.forEach(c=>{
+    const th=document.createElement('th'); th.textContent=c.label; th.dataset.key=c.key;
+    if(oSortKey===c.key) th.classList.add(oSortAsc?'sorted-asc':'sorted-desc');
+    th.onclick=()=>{ if(oSortKey===c.key){oSortAsc=!oSortAsc;}else{oSortKey=c.key;oSortAsc=true;} renderOsha(); };
+    thead.appendChild(th);
+  });
   let rows=getFilteredOsha();
   document.getElementById('oResultCount').textContent=rows.length;
   rows.sort((a,b)=>{let va=a[oSortKey],vb=b[oSortKey];return typeof va==='number'?(oSortAsc?va-vb:vb-va):(oSortAsc?String(va||'').localeCompare(String(vb||'')):String(vb||'').localeCompare(String(va||'')));});
   const tbody=document.getElementById('oTableBody');
-  if(!rows.length){tbody.innerHTML='<tr><td colspan="'+OSHA_COLS.length+'" class="no-results">No results match the current filters.</td></tr>';return;}
-  tbody.innerHTML=rows.map(d=>'<tr>'+OSHA_COLS.map(c=>{const v=d[c.key],display=c.fmt?c.fmt(v):(v||''),cls=c.noExpand?'':' class="expandable"',title=typeof v==='string'?v.replace(/"/g,'&quot;'):(v||'');return '<td'+cls+' title="'+title+'">'+display+'</td>';}).join('')+'</tr>').join('');
+  if(!rows.length){tbody.innerHTML='<tr><td colspan="'+visibleCols.length+'" class="no-results">No results match the current filters.</td></tr>';return;}
+  tbody.innerHTML=rows.map(d=>'<tr>'+visibleCols.map(c=>{const v=d[c.key],display=c.fmt?c.fmt(v):(v||''),cls=c.noExpand?'':' class="expandable"',title=typeof v==='string'?v.replace(/"/g,'&quot;'):(v||'');return '<td'+cls+' title="'+title+'">'+display+'</td>';}).join('')+'</tr>').join('');
 }
 
 function exportOsha(){
