@@ -6,6 +6,8 @@ Adds columns R–W: Website, Contact Name, Title, Email, Phone, Company Info.
 
 import json
 import os
+import re
+import subprocess
 import time
 from urllib.parse import urlparse
 
@@ -20,7 +22,6 @@ SHEET_NAME = "OSHA company audits"
 
 HEADER_ROW = 4
 DATA_START_ROW = 5
-DATA_END_ROW = 658  # last 2026 row
 
 # Column indices (0-based) in the sheet
 COL_COMPANY = 0   # A
@@ -85,7 +86,7 @@ def get_sheets_service():
 def read_2026_rows(service):
     result = service.spreadsheets().values().get(
         spreadsheetId=SPREADSHEET_ID,
-        range=f"'{SHEET_NAME}'!A{DATA_START_ROW}:W{DATA_END_ROW}",
+        range=f"'{SHEET_NAME}'!A{DATA_START_ROW}:W",
     ).execute()
     return result.get("values", [])
 
@@ -238,6 +239,12 @@ def format_info(org):
     return summary or desc
 
 
+def clean_company_name(name):
+    """Strip state license ID prefixes like 'Wa317989845 - ' before API search."""
+    cleaned = re.sub(r'^[A-Za-z]{0,3}\d{4,}\s*[-\u2013]\s*', '', name).strip()
+    return cleaned if cleaned else name
+
+
 def format_website(org):
     url = org.get("website_url", "") or ""
     if not url:
@@ -276,12 +283,15 @@ def main():
     stats = {"website": 0, "contact": 0, "info": 0, "no_result": 0}
     pending_updates = []
     processed = 0
+    newly_checked = 0
+    MAX_NEW = 100
 
     for i, row in enumerate(rows):
         sheet_row = DATA_START_ROW + i
         company = row[COL_COMPANY].strip() if len(row) > COL_COMPANY else ""
         if not company:
             continue
+        search_name = clean_company_name(company)
 
         # Skip if already enriched (has website or info)
         already_website = (row[COL_WEBSITE].strip() if len(row) > COL_WEBSITE else "")
@@ -297,7 +307,7 @@ def main():
         person_data = None
 
         # Step 1: Search for people
-        people = search_people(company)
+        people = search_people(search_name)
         time.sleep(API_DELAY)
         if people:
             best = pick_best_person(people)
@@ -309,13 +319,17 @@ def main():
 
         # Step 2: Org enrichment if no org from person
         if not org:
-            found_org = search_org_by_name(company)
+            found_org = search_org_by_name(search_name)
             time.sleep(API_DELAY)
             if found_org:
                 domain = found_org.get("primary_domain", "")
                 if domain:
-                    org = enrich_org_by_domain(domain)
+                    enriched = enrich_org_by_domain(domain)
                     time.sleep(API_DELAY)
+                    org = enriched if enriched else found_org
+                else:
+                    # No domain but org search returned data — use it directly
+                    org = found_org
 
         # Build updates
         enriched_cols = []
@@ -369,12 +383,17 @@ def main():
             print(f"    {company} -> cols {','.join(enriched_cols)}")
 
         processed += 1
+        newly_checked += 1
 
-        # Flush to sheet every FLUSH_EVERY companies
-        if processed % FLUSH_EVERY == 0 and pending_updates:
+        # Flush to sheet every FLUSH_EVERY newly-checked companies
+        if newly_checked % FLUSH_EVERY == 0 and pending_updates:
             write_batch(service, pending_updates)
             print(f"  [Flushed {len(pending_updates)} updates to sheet]")
             pending_updates = []
+
+        if newly_checked >= MAX_NEW:
+            print(f"\n  Reached limit of {MAX_NEW} companies — stopping.")
+            break
 
     # Final flush
     if pending_updates:
@@ -387,6 +406,11 @@ def main():
     print(f"  Company Info:  {stats['info']}")
     print(f"  Contacts:      {stats['contact']}")
     print(f"  No result:     {stats['no_result']}")
+
+    if stats["website"] > 0:
+        print(f"\n  {stats['website']} websites added — running HubSpot check automatically...")
+        script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hubspot_check.py")
+        subprocess.run(["python3", script], check=False)
 
 
 if __name__ == "__main__":

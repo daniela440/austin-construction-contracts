@@ -12,6 +12,7 @@ Subsequent runs: max 50 companies per week.
 
 import json
 import os
+import subprocess
 import time
 from datetime import datetime, timedelta
 from urllib.parse import urlparse
@@ -530,6 +531,11 @@ def enrich(first_run=False):
     week_key, new_count = load_counter()
     print(f"  Weekly usage: {new_count}/{WEEKLY_LIMIT} ({week_key})")
     print("Done!")
+
+    if stats["website"] > 0:
+        print(f"\n  {stats['website']} websites added — running HubSpot check automatically...")
+        script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hubspot_check.py")
+        subprocess.run(["python3", script], check=False)
 
 
 if __name__ == "__main__":

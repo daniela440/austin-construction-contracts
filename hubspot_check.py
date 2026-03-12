@@ -78,10 +78,10 @@ def read_sheet_data(service):
 
 
 def read_osha_data(service):
-    """Read all rows A:AB from the OSHA sheet."""
+    """Read data rows A5:AB from the OSHA sheet (row 5 = first data row)."""
     result = service.spreadsheets().values().get(
         spreadsheetId=SCRAPER_SHEET_ID,
-        range=f"'{OSHA_SHEET_NAME}'!A:AB",
+        range=f"'{OSHA_SHEET_NAME}'!A5:AB",
     ).execute()
     return result.get("values", [])
 
@@ -306,28 +306,16 @@ def check_osha_sheet(service):
         print("No data found in OSHA sheet.")
         return
 
-    # Write headers if missing
-    header = rows[0]
-    if (len(header) <= OSHA_COL_HUBSPOT or header[OSHA_COL_HUBSPOT] != "In HubSpot?"
-            or len(header) <= OSHA_COL_REPLIES or header[OSHA_COL_REPLIES] != "Replies"):
-        print(f"Writing headers to {hs_col}1:{last_col}1...")
-        service.spreadsheets().values().update(
-            spreadsheetId=SCRAPER_SHEET_ID,
-            range=f"'{OSHA_SHEET_NAME}'!{hs_col}1:{last_col}1",
-            valueInputOption="RAW",
-            body={"values": [["In HubSpot?", "Last Engaged", "Site Visits", "In Sequence?", "Replies"]]},
-        ).execute()
-
-    data_rows = rows[1:]
-    total = sum(1 for r in data_rows if len(r) > OSHA_COL_COMPANY and r[OSHA_COL_COMPANY].strip())
+    total = sum(1 for r in rows if len(r) > OSHA_COL_COMPANY and r[OSHA_COL_COMPANY].strip())
     print(f"Found {total} rows with company names. Checking HubSpot...")
 
     updates = []
     checked = skipped = 0
 
-    for i, row in enumerate(data_rows, start=2):
+    # enumerate with start=5 so i == actual sheet row number (data starts at row 5)
+    for i, row in enumerate(rows, start=5):
         company = row[OSHA_COL_COMPANY].strip() if len(row) > OSHA_COL_COMPANY else ""
-        if not company or company == "Company" or company.startswith("===") or company.startswith("These"):
+        if not company or company.startswith("===") or company.startswith("These"):
             continue
 
         # Skip if all 5 columns already populated

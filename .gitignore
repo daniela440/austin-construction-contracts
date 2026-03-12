@@ -5,3 +5,5 @@ search_counter.json
 __pycache__/
 *.pyc
 .DS_Store
+node_modules/
+.claude/
