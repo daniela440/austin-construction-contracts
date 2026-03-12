@@ -599,7 +599,6 @@ function renderContracts(){
   });
 
   let rows = getFilteredContracts();
-  document.getElementById('resultCount').textContent = rows.length;
   document.getElementById('filteredValue').textContent = fmt$(rows.reduce((s,d)=>s+d.amount,0));
 
   rows.sort((a,b)=>{
@@ -612,6 +611,29 @@ function renderContracts(){
       ? (cSortAsc?va-vb:vb-va)
       : (cSortAsc?String(va||'').localeCompare(String(vb||'')):String(vb||'').localeCompare(String(va||'')));
   });
+
+  // Show one top-level row per company and keep the filtered awards in the expansion panel.
+  const groupedRows = [];
+  const groupedAwards = new Map();
+  rows.forEach(row => {
+    if (!groupedAwards.has(row._groupKey)) {
+      groupedAwards.set(row._groupKey, []);
+      groupedRows.push(row);
+    }
+    groupedAwards.get(row._groupKey).push(row);
+  });
+
+  rows = groupedRows.map(row => {
+    const awards = groupedAwards.get(row._groupKey) || [];
+    return {
+      ...row,
+      _groupAwards: awards,
+      _awardCount: awards.length,
+      _totalValue: awards.reduce((sum, award) => sum + (award.amount || 0), 0)
+    };
+  });
+
+  document.getElementById('resultCount').textContent = rows.length;
 
   const tbody = document.getElementById('tableBody');
   if(!rows.length){
