@@ -421,7 +421,11 @@ function normalizeCompany(name) {
 //          T=inSequence U=replies V=score W=action X=awardCount Y=totalValue Z=oshaViolation
 const COLS = [
   {key:'state',        label:'State/City'},
-  {key:'company',      label:'Company'},
+  {key:'company',      label:'Company', rowFmt: d => {
+    const isOpen = expandedCompanies.has(d._groupKey);
+    const style = 'cursor:pointer;color:var(--indigo-600);font-weight:600;text-decoration:underline dotted;';
+    return '<span style="'+style+'" onclick="toggleAwards(\''+d._groupKey+'\')" title="Click to expand all awards for this company">'+(d.company||'')+'</span>';
+  }, noExpand:true},
   {key:'website',      label:'Website',      fmt:fmtWebsite, noExpand:true},
   {key:'companyInfo',  label:'Company Info'},
   {key:'contact',      label:'Contact'},
@@ -429,7 +433,6 @@ const COLS = [
   {key:'phone',        label:'Phone'},
   {key:'email',        label:'Email'},
   {key:'type',         label:'Commodity Type'},
-  {key:'description',  label:'Description'},
   {key:'link',         label:'Link', fmt:v=>v?'<a href="'+v+'" target="_blank">View</a>':'', noExpand:true},
   {key:'inHubSpot',    label:'In HubSpot?',  fmt:fmtHubSpot, noExpand:true},
   {key:'hsLastEngaged',label:'Last Engaged',  hsOnly:true, noExpand:true},
@@ -477,15 +480,19 @@ async function loadContracts() {
       oshaViolation:(row[25]||'').trim(),
     })).filter(d => d.company);
 
-    // Client-side company grouping for expandable award rows
+    // Client-side company grouping — use numeric IDs to avoid escaping issues in onclick
     const groups = {};
+    const keyMap = {};
+    let gid = 0;
     CONTRACTS_DATA.forEach(d => {
-      const key = normalizeCompany(d.company);
+      const norm = normalizeCompany(d.company);
+      if (keyMap[norm] === undefined) keyMap[norm] = 'g' + gid++;
+      const key = keyMap[norm];
       if (!groups[key]) groups[key] = [];
       groups[key].push(d);
     });
     CONTRACTS_DATA.forEach(d => {
-      const key = normalizeCompany(d.company);
+      const key = keyMap[normalizeCompany(d.company)];
       d._groupKey   = key;
       d._awardCount = d.awardCount || groups[key].length;
       d._totalValue = d.totalValue || groups[key].reduce((s,r)=>s+r.amount,0);
@@ -613,6 +620,7 @@ function renderContracts(){
   }
 
   const colCount = visibleCols.length;
+  const renderedExpansions = new Set();
   const html = rows.map(d=>{
     const mainRow = '<tr>' + visibleCols.map(c=>{
       const v = d[c.key];
@@ -622,9 +630,10 @@ function renderContracts(){
       return '<td'+cls+' title="'+titleAttr+'">'+display+'</td>';
     }).join('') + '</tr>';
 
-    // Expandable awards detail row
+    // Detail row only on first occurrence of this company in current view
     let detailRow = '';
-    if(expandedCompanies.has(d._groupKey)) {
+    if(expandedCompanies.has(d._groupKey) && !renderedExpansions.has(d._groupKey)) {
+      renderedExpansions.add(d._groupKey);
       const awards = d._groupAwards;
       const awardRows = awards.map(a=>
         '<tr><td></td>'
