@@ -2,14 +2,14 @@
 
 ## What This Project Does
 
-Scrapes government procurement portals across 11 sources, standardizes the data into a Google Sheet, enriches it with company/contact info via Apollo.io, checks it against HubSpot CRM, and displays everything in a live Netlify dashboard. The goal is a steady pipeline of construction contract leads with contact details ready for outreach.
+Scrapes government procurement portals across 12 sources, standardizes the data into a Google Sheet, enriches it with company/contact info via Apollo.io, checks it against HubSpot CRM, and displays everything in a live Netlify dashboard. The goal is a steady pipeline of construction contract leads with contact details ready for outreach.
 
 ---
 
 ## Architecture at a Glance
 
 ```
-11 Scrapers → Sheet A (Google Sheets) → Enrichment → HubSpot Check → Netlify Dashboard
+12 Scrapers → Sheet A (Google Sheets) → Enrichment → HubSpot Check → Netlify Dashboard
                                                                          ↑
                                OSHA Scraper → OSHA Sheet (same workbook) ┘
 ```
@@ -33,7 +33,7 @@ Scrapes government procurement portals across 11 sources, standardizes the data 
 
 Scripts run on two automated schedules:
 
-- **`run_scrapers.sh`** — runs all 11 scrapers sequentially every **Monday at 8 AM** (local machine cron). Logs to `logs/scraper_YYYY-MM-DD.log`. Alaska DOT is automatically retried once on failure.
+- **`run_scrapers.sh`** — runs all 12 scrapers sequentially every **Monday at 8 AM** (local machine cron). Logs to `logs/scraper_YYYY-MM-DD.log`. Alaska DOT is automatically retried once on failure.
   - Cron entry (see `crontab.txt`): `0 8 * * 1 bash /Users/daniela/scraper-project/run_scrapers.sh`
 - **`enrich_company_info.py`** — runs daily at **6 AM ET** via GitHub Actions (`.github/workflows/enrich-companies.yml`). Can also be triggered manually from the GitHub UI.
 
@@ -51,7 +51,8 @@ STEP 1 — Collect Data (run_scrapers.sh handles all of the below)
   ├── uiowa_buildui_contracts.py
   ├── nj_start_contracts.py           ← Playwright (headless browser)
   ├── tn_tdot_contracts.py            ← Playwright (headless browser) + PDF parsing
-  └── co_vss_contracts.py             ← Playwright + PyMuPDF + macOS Vision OCR
+  ├── co_vss_contracts.py             ← Playwright + PyMuPDF + macOS Vision OCR
+  └── mt_mdt_contracts.py             ← PDF parsing
 
 STEP 2 — OSHA Data (independent pipeline, run separately/manually)
   └── osha_inspection_scraper.py      ← scrapes OSHA.gov violations
@@ -71,7 +72,7 @@ STEP 5 — Dashboard (automatic, no action needed)
 
 ---
 
-## The 11 Scrapers
+## The 12 Scrapers
 
 | Script | Source | Tech | Min Amount | Contact Info? | Sheet Tab |
 |--------|--------|------|-----------|--------------|-----------|
@@ -86,6 +87,7 @@ STEP 5 — Dashboard (automatic, no action needed)
 | `nj_start_contracts.py` | NJ START portal | Playwright | $250K | Yes (vendor profiles) | Main |
 | `tn_tdot_contracts.py` | TN TDOT PDFs | Playwright + PyMuPDF | — | No | Main |
 | `co_vss_contracts.py` | Colorado CDOT Bid Tabs | Playwright + PyMuPDF + macOS Vision OCR | varies | No | Main |
+| `mt_mdt_contracts.py` | Montana MDT award sheet | PDF parsing | varies | No | Main |
 
 All scrapers are **append-only** — they never clear the sheet. They deduplicate by (Company Name + Contract Name) before writing to avoid double-entries.
 

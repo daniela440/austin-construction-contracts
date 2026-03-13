@@ -51,6 +51,13 @@ run_scraper "Idaho DPW"     idaho_dpw_contracts.py
 run_scraper "Illinois BidBuy" il_bidbuy_contracts.py
 run_scraper "Minnesota QuestCDN" mn_questcdn_contracts.py
 run_scraper "Mississippi MDOT" ms_mdot_contracts.py
+run_scraper "Montana MDT"     mt_mdt_contracts.py
+run_scraper "USA Spending"     import_usaspending.py
+
+# --- Enrichment + Scoring (depend on scraper data being present) ---
+run_scraper "Apollo Enrichment"  enrich_company_info.py
+run_scraper "HubSpot Check"      hubspot_check.py
+run_scraper "Lead Scoring"       score_leads.py
 
 echo "" | tee -a "$LOG"
 echo "=====================================" | tee -a "$LOG"
