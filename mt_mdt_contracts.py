@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import re
+from pathlib import Path
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -19,7 +20,11 @@ import fitz  # PyMuPDF
 import requests
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+from playwright.sync_api import sync_playwright
 
+CONTRACTING_URL = "https://mdt.mt.gov/business/contracting/"
+FTP_CONTRACTING_URL = "https://ftp.mdt.mt.gov/business/contracting/default.aspx"
 PDF_URL = (
     "https://mdt.mt.gov/other/webdata/external/contractplans/contract/archives/"
     "AWARD_SHEETS/awardsheets-2026.pdf"
@@ -174,6 +179,84 @@ def download_pdf(url: str) -> bytes:
     if "pdf" not in content_type and response.content[:5] != b"%PDF-":
         raise RuntimeError("MDT did not return a PDF document.")
     return response.content
+
+
+def download_pdf_via_playwright(
+    headed: bool = False,
+    chrome_user_data_dir: str | None = None,
+    chrome_profile_dir: str = "Default",
+) -> bytes:
+    intercepted: list[bytes] = []
+
+    with sync_playwright() as p:
+        if chrome_user_data_dir:
+            context = p.chromium.launch_persistent_context(
+                user_data_dir=chrome_user_data_dir,
+                channel="chrome",
+                headless=not headed,
+                args=[f"--profile-directory={chrome_profile_dir}"],
+                viewport={"width": 1440, "height": 1200},
+            )
+            browser = None
+        else:
+            browser = p.chromium.launch(headless=not headed)
+            context = browser.new_context(viewport={"width": 1440, "height": 1200})
+
+        try:
+            page = context.pages[0] if context.pages else context.new_page()
+
+            def handle_response(resp):
+                url_lower = resp.url.lower()
+                if "awardsheets-2026.pdf" not in url_lower and not url_lower.endswith(".pdf"):
+                    return
+                try:
+                    body = resp.body()
+                except Exception:
+                    return
+                if body[:5] == b"%PDF-":
+                    intercepted.append(body)
+
+            page.on("response", handle_response)
+
+            for start_url in (CONTRACTING_URL, FTP_CONTRACTING_URL):
+                try:
+                    page.goto(start_url, wait_until="domcontentloaded", timeout=120000)
+                    page.wait_for_timeout(3000)
+                except PlaywrightTimeoutError:
+                    continue
+
+                for selector in (
+                    "a:has-text('Award Sheets 2026')",
+                    "a[href*='awardsheets-2026.pdf']",
+                    "a:has-text('Awarded Contracts')",
+                ):
+                    try:
+                        locator = page.locator(selector).first
+                        if locator.count() == 0:
+                            continue
+                        locator.click()
+                        page.wait_for_timeout(5000)
+                        if intercepted:
+                            return intercepted[0]
+                    except Exception:
+                        continue
+
+                try:
+                    response = context.request.get(PDF_URL, timeout=60000)
+                    body = response.body()
+                    if body[:5] == b"%PDF-":
+                        return body
+                except Exception:
+                    pass
+
+                if intercepted:
+                    return intercepted[0]
+        finally:
+            context.close()
+            if browser:
+                browser.close()
+
+    raise RuntimeError("Playwright browser session did not receive the Montana awards PDF.")
 
 
 def extract_pages(pdf_bytes: bytes) -> list[str]:
@@ -476,8 +559,25 @@ def preview_results(results: list[dict[str, str]], limit: int = 10) -> None:
         print()
 
 
-def main(preview: bool = False) -> None:
-    pdf_bytes = download_pdf(PDF_URL)
+def main(
+    preview: bool = False,
+    headed: bool = False,
+    chrome_user_data_dir: str | None = None,
+    chrome_profile_dir: str = "Default",
+) -> None:
+    try:
+        pdf_bytes = download_pdf(PDF_URL)
+        print("Fetched Montana awards PDF via direct HTTP")
+    except Exception as direct_exc:
+        print(f"Direct PDF fetch failed: {direct_exc}")
+        print("Falling back to Playwright browser session...")
+        pdf_bytes = download_pdf_via_playwright(
+            headed=headed,
+            chrome_user_data_dir=chrome_user_data_dir,
+            chrome_profile_dir=chrome_profile_dir,
+        )
+        print("Fetched Montana awards PDF via Playwright")
+
     raw_rows = parse_awards(pdf_bytes)
     print(f"Parsed {len(raw_rows)} awarded Montana rows from the 2026 award sheet")
 
@@ -495,5 +595,24 @@ def main(preview: bool = False) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Montana MDT award-sheet scraper")
     parser.add_argument("--preview", action="store_true", help="Preview results without writing to Google Sheets")
+    parser.add_argument("--headed", action="store_true", help="Use a visible browser for the Playwright fallback")
+    parser.add_argument(
+        "--chrome-user-data-dir",
+        default=None,
+        help="Optional Chrome user data dir for a persistent real-browser session",
+    )
+    parser.add_argument(
+        "--chrome-profile-dir",
+        default="Default",
+        help="Chrome profile directory name when using --chrome-user-data-dir",
+    )
     args = parser.parse_args()
-    main(preview=args.preview)
+    chrome_user_data_dir = args.chrome_user_data_dir
+    if chrome_user_data_dir == "auto":
+        chrome_user_data_dir = str(Path.home() / "Library/Application Support/Google/Chrome")
+    main(
+        preview=args.preview,
+        headed=args.headed,
+        chrome_user_data_dir=chrome_user_data_dir,
+        chrome_profile_dir=args.chrome_profile_dir,
+    )
