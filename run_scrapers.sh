@@ -52,6 +52,7 @@ run_scraper "Illinois BidBuy" il_bidbuy_contracts.py
 run_scraper "Minnesota QuestCDN" mn_questcdn_contracts.py
 run_scraper "Mississippi MDOT" ms_mdot_contracts.py
 run_scraper "Montana MDT"     mt_mdt_contracts.py
+run_scraper "Nevada ePro"     nv_epro_contracts.py
 run_scraper "USA Spending"     import_usaspending.py
 
 # --- Enrichment + Scoring (depend on scraper data being present) ---
