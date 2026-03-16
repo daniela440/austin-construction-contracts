@@ -270,9 +270,9 @@
       <div class="score-key">
         <div class="score-key-header" onclick="this.nextElementSibling.classList.toggle('open');this.querySelector('.score-key-toggle').textContent=this.nextElementSibling.classList.contains('open')?'Hide':'Show'">
           <h2>How the Score is Calculated (0–100)</h2>
-          <span class="score-key-toggle">Show</span>
+          <span class="score-key-toggle">Hide</span>
         </div>
-        <div class="score-key-body">
+        <div class="score-key-body open">
           <div class="score-key-grid">
             <div class="score-key-item"><span class="score-key-pts">up to 30 pts</span><span class="score-key-desc"><strong>Award amount</strong> — log-scaled; ~$10K = 2 pts, ~$1M = 12 pts, ~$10M = 30 pts</span></div>
             <div class="score-key-item"><span class="score-key-pts">up to 25 pts</span><span class="score-key-desc"><strong>Recency</strong> — &le;30 days = 25 pts, &le;90 days = 15 pts, &le;180 days = 8 pts, older = 0</span></div>
