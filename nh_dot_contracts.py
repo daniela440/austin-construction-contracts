@@ -53,7 +53,6 @@ SHEET_NAME           = "Webscraper Tool for Procurement Sites Two"
 
 # Year IDs to scrape (add more from the page's <select> as needed)
 YEAR_IDS = {
-    "2025": "11236",
     "2026": "11741",
 }
 
