@@ -126,6 +126,20 @@
   .osha-badge { display: inline-block; padding: .15rem .5rem; border-radius: 9999px; font-size: .7rem; font-weight: 700; white-space: nowrap; }
   .osha-yes { background: #fee2e2; color: #991b1b; }
 
+  /* Score key panel */
+  .score-key { background: #fff; border-radius: .75rem; padding: 1rem 1.5rem; box-shadow: 0 1px 4px rgba(0,0,0,.06); border: 1px solid var(--slate-200); margin-bottom: 1rem; }
+  .score-key-header { display: flex; align-items: center; justify-content: space-between; cursor: pointer; user-select: none; }
+  .score-key-header h2 { font-size: .7rem; color: var(--slate-400); text-transform: uppercase; letter-spacing: .08em; font-weight: 700; margin: 0; }
+  .score-key-toggle { font-size: .7rem; color: var(--slate-400); }
+  .score-key-body { display: none; margin-top: .875rem; }
+  .score-key-body.open { display: block; }
+  .score-key-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: .6rem; margin-bottom: .875rem; }
+  .score-key-item { display: flex; align-items: flex-start; gap: .5rem; }
+  .score-key-pts { font-size: .72rem; font-weight: 800; background: var(--slate-100); color: var(--slate-700); border-radius: .3rem; padding: .1rem .4rem; white-space: nowrap; min-width: 3.5rem; text-align: center; }
+  .score-key-desc { font-size: .78rem; color: var(--slate-600); line-height: 1.4; }
+  .score-key-tiers { display: flex; gap: 1rem; flex-wrap: wrap; padding-top: .6rem; border-top: 1px solid var(--slate-100); }
+  .score-key-tier { display: flex; align-items: center; gap: .4rem; font-size: .75rem; color: var(--slate-600); }
+
   /* Score pill */
   .score-pill { display: inline-flex; align-items: center; gap: .35rem; white-space: nowrap; }
   .score-num { display: inline-block; padding: .15rem .45rem; border-radius: .3rem; font-size: .75rem; font-weight: 800; min-width: 2rem; text-align: center; }
@@ -250,6 +264,26 @@
           </div>
           <div class="filter-group">
             <button class="btn-clear" id="btnClear">Clear Filters</button>
+          </div>
+        </div>
+      </div>
+      <div class="score-key">
+        <div class="score-key-header" onclick="this.nextElementSibling.classList.toggle('open');this.querySelector('.score-key-toggle').textContent=this.nextElementSibling.classList.contains('open')?'Hide':'Show'">
+          <h2>How the Score is Calculated (0–100)</h2>
+          <span class="score-key-toggle">Show</span>
+        </div>
+        <div class="score-key-body">
+          <div class="score-key-grid">
+            <div class="score-key-item"><span class="score-key-pts">up to 30 pts</span><span class="score-key-desc"><strong>Award amount</strong> — log-scaled; ~$10K = 2 pts, ~$1M = 12 pts, ~$10M = 30 pts</span></div>
+            <div class="score-key-item"><span class="score-key-pts">up to 25 pts</span><span class="score-key-desc"><strong>Recency</strong> — &le;30 days = 25 pts, &le;90 days = 15 pts, &le;180 days = 8 pts, older = 0</span></div>
+            <div class="score-key-item"><span class="score-key-pts">up to 20 pts</span><span class="score-key-desc"><strong>HubSpot status</strong> — not in HubSpot = 20 pts (fresh lead); in HubSpot with replies = 5 pts; in HubSpot no replies = 10 pts</span></div>
+            <div class="score-key-item"><span class="score-key-pts">15 pts</span><span class="score-key-desc"><strong>OSHA overlap</strong> — company also appears in the OSHA violations sheet</span></div>
+            <div class="score-key-item"><span class="score-key-pts">up to 10 pts</span><span class="score-key-desc"><strong>Contact completeness</strong> — email + phone = 10 pts; email only = 5 pts; neither = 0</span></div>
+          </div>
+          <div class="score-key-tiers">
+            <span class="score-key-tier"><span class="score-num score-high">70+</span> High priority</span>
+            <span class="score-key-tier"><span class="score-num score-mid">40–69</span> Medium priority</span>
+            <span class="score-key-tier"><span class="score-num score-low">&lt;40</span> Low priority</span>
           </div>
         </div>
       </div>
@@ -584,6 +618,30 @@ function getFilteredContracts(){
   });
 }
 
+function getFilteredContractCompanies(){
+  const filteredAwards = getFilteredContracts();
+  const groupedRows = [];
+  const groupedAwards = new Map();
+
+  filteredAwards.forEach(row => {
+    if (!groupedAwards.has(row._groupKey)) {
+      groupedAwards.set(row._groupKey, []);
+      groupedRows.push(row);
+    }
+    groupedAwards.get(row._groupKey).push(row);
+  });
+
+  return groupedRows.map(row => {
+    const awards = groupedAwards.get(row._groupKey) || [];
+    return {
+      ...row,
+      _groupAwards: awards,
+      _awardCount: awards.length,
+      _totalValue: awards.reduce((sum, award) => sum + (award.amount || 0), 0)
+    };
+  });
+}
+
 function renderContracts(){
   const hsFilter = document.querySelector('#fHSFilter .seg-btn.active').dataset.val;
   const visibleCols = COLS.filter(c=>!c.hsOnly||hsFilter==='hs');
@@ -598,9 +656,10 @@ function renderContracts(){
     thead.appendChild(th);
   });
 
-  let rows = getFilteredContracts();
-  document.getElementById('filteredValue').textContent = fmt$(rows.reduce((s,d)=>s+d.amount,0));
+  const filteredAwards = getFilteredContracts();
+  document.getElementById('filteredValue').textContent = fmt$(filteredAwards.reduce((s,d)=>s+d.amount,0));
 
+  let rows = getFilteredContractCompanies();
   rows.sort((a,b)=>{
     let va=a[cSortKey], vb=b[cSortKey];
     // numeric sort for score and _totalValue and _awardCount
@@ -610,27 +669,6 @@ function renderContracts(){
     return typeof va==='number'
       ? (cSortAsc?va-vb:vb-va)
       : (cSortAsc?String(va||'').localeCompare(String(vb||'')):String(vb||'').localeCompare(String(va||'')));
-  });
-
-  // Show one top-level row per company and keep the filtered awards in the expansion panel.
-  const groupedRows = [];
-  const groupedAwards = new Map();
-  rows.forEach(row => {
-    if (!groupedAwards.has(row._groupKey)) {
-      groupedAwards.set(row._groupKey, []);
-      groupedRows.push(row);
-    }
-    groupedAwards.get(row._groupKey).push(row);
-  });
-
-  rows = groupedRows.map(row => {
-    const awards = groupedAwards.get(row._groupKey) || [];
-    return {
-      ...row,
-      _groupAwards: awards,
-      _awardCount: awards.length,
-      _totalValue: awards.reduce((sum, award) => sum + (award.amount || 0), 0)
-    };
   });
 
   document.getElementById('resultCount').textContent = rows.length;
@@ -688,14 +726,14 @@ function toggleAwards(groupKey) {
 }
 
 function exportContracts(){
-  const rows=getFilteredContracts(); if(!rows.length){alert('No data to export');return;}
+  const rows=getFilteredContractCompanies(); if(!rows.length){alert('No data to export');return;}
   const exportCols=[
     {key:'state',label:'State/City'},{key:'company',label:'Company'},{key:'website',label:'Website'},
     {key:'companyInfo',label:'Company Info'},{key:'contact',label:'Contact'},{key:'title',label:'Title'},
     {key:'phone',label:'Phone'},{key:'email',label:'Email'},{key:'amount',label:'Award Amount'},
     {key:'date',label:'Begin Date'},{key:'type',label:'Commodity Type'},{key:'description',label:'Description'},
-    {key:'link',label:'Link'},{key:'oshaViolation',label:'OSHA Violation?'},{key:'score',label:'Score'},
-    {key:'action',label:'Action'},{key:'_awardCount',label:'Award Count'},{key:'_totalValue',label:'Total Value'}
+    {key:'link',label:'Link'},{key:'inHubSpot',label:'In HubSpot?'},{key:'oshaViolation',label:'OSHA Violation?'},
+    {key:'score',label:'Score'},{key:'action',label:'Action'},{key:'_awardCount',label:'Award Count'},{key:'_totalValue',label:'Total Value'}
   ];
   const esc=v=>{if(v==null)return '';const s=String(v);return(s.includes(',')||s.includes('"')||s.includes('\n'))?'"'+s.replace(/"/g,'""')+'"':s;};
   let csv=exportCols.map(c=>esc(c.label)).join(',')+'\n';
